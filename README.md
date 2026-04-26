@@ -52,15 +52,15 @@ create logs and data directory inside backend
 Add files backend/.env backend/config.json and frontend/.env.production
 frontend/.env.production to have NEXT_PUBLIC_API_BASE=http://IP:8007
 **Start backend with PM2 (uses the venv's uvicorn)**
-  pm2 start "/home/ubuntu/app/backend/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8007"  --name reddit-scanner-backend --cwd /home/ubuntu/app/backend
+  pm2 start "/home/ubuntu/reddit-scanner/backend/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8007"  --name reddit-scanner-backend --cwd /home/ubuntu/reddit-scanner/backend
 
 **Start Frontend**
-  cd ~/app/frontend
+  cd /frontend
   EC2_IP=$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4)
   echo "NEXT_PUBLIC_API_BASE=http://${EC2_IP}:8007" > .env.production
   npm install
   npm run build
-  pm2 start "npm run start" --name reddit-scanner-frontend --cwd /home/ubuntu/app/frontend
+  pm2 start "npm run start" --name reddit-scanner-frontend --cwd /home/ubuntu/reddit-scanner/frontend
 
 
 ### What you need to do (post-pull checklist)
