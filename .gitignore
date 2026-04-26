@@ -4,6 +4,7 @@
 .env.*.local
 .env.production
 .env.development
+backend/.env
 
 # User-specific config (ships as config.example.json)
 backend/config.json

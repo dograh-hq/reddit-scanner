@@ -191,6 +191,9 @@ async def get_results(task_id: str):
         "post_strategies": task.post_strategies,
         "post_validations": task.post_validations,
 
+        # Step 2.5: per-post promo verdicts so the frontend can render the Promotional/Launch chip
+        "promotional_detections": task.promotional_detections,
+
         # Metadata
         "step_timestamps": task.step_timestamps,
         "error_log": task.error_log,
@@ -213,8 +216,9 @@ async def get_history():
 # --- Subreddit Memory Bank: permanent archive of PASS/UNSURE posts ---
 @app.get("/memory/subreddits", dependencies=[Depends(verify_password)])
 async def get_memory_subreddits(page: int = 1, page_size: int = 25,
-                                order: str = "desc", sort_by: str = "posts"):
-    """Paginated list of subreddits. sort_by = posts (default) | members."""
+                                order: str = "desc", sort_by: str = "keyword_finds"):
+    """Paginated list of subreddits. sort_by = keyword_finds (default, unbiased) | posts | members.
+    Each row carries BOTH `post_count` (total) and `keyword_count` (unbiased) regardless of sort."""
     return storage.list_memory_subreddits(page=page, page_size=page_size, order=order, sort_by=sort_by)
 
 
@@ -227,6 +231,28 @@ async def get_memory_posts(name: str, page: int = 1, page_size: int = 25,
         subreddit=name, page=page, page_size=page_size,
         sort_by=sort_by, order=order, tag_filter=filter, q=q,
     )
+
+
+# --- Promotional/Launch archive: dedicated dashboard data source ---
+@app.get("/promotional", dependencies=[Depends(verify_password)])
+async def get_promotional_posts(page: int = 1, page_size: int = 25,
+                                sort_by: str = "upvotes", order: str = "desc",
+                                filter: str = "all", promo_type: str = "all",
+                                subreddit: str | None = None,
+                                q: str | None = None):
+    """Paginated list of promo-tagged posts with sort + tag/promo_type/subreddit filters + title search.
+    `filter`: all | pass | unsure | fail | unrated. `promo_type`: all | launch | built-something | self-promo | subtle-mention.
+    `subreddit`: filter posts whose subreddit_sources contains the named subreddit (cross-posts match if ANY source equals it)."""
+    return storage.list_promotional_posts(
+        page=page, page_size=page_size, sort_by=sort_by, order=order,
+        tag_filter=filter, promo_type=promo_type, subreddit=subreddit, q=q,
+    )
+
+
+@app.get("/promotional/subreddits", dependencies=[Depends(verify_password)])
+async def get_promotional_subreddits():
+    """Subreddits that have any promo posts, sorted by post count DESC. Powers the /promo dropdown."""
+    return storage.list_promotional_subreddits()
 
 
 # --- Health check ---

@@ -2,6 +2,8 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { Tour, resetTourFlags, type TourStep } from "./Tour";
+import { ResultsExample } from "./ResultsExample";
 
 // Use env var for production, fallback to localhost for dev
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8007";
@@ -9,6 +11,58 @@ const POLL_INTERVAL = 5000; // 5 seconds - faster for progressive updates
 // Posts at or above this score render in the high-signal zone; below it render
 // in a visually-demoted, collapsed-by-default sub-section within each results card list.
 const LOW_SCORE_THRESHOLD = 5;
+
+// Guided-tour steps for the main page. Targets are IDs added to the relevant elements
+// below. Steps whose targets aren't on the page (e.g. results-row before a run) are
+// auto-skipped by the Tour component.
+const MAIN_TOUR_STEPS: TourStep[] = [
+  {
+    id: "tour-banks",
+    title: "Two archives",
+    body: "SUBREDDIT BANK — Contains list of subreddits where other have made posts relevant to your domain (along with the posts). PROMO BANK — promotional and launch posts by others - to be used as inspiration for what content is working and which subreddits allow promotions.",
+  },
+  {
+    id: "tour-history",
+    title: "Past runs",
+    body: "Re-load any prior run from last 7 days (deleted after 7 days). But you still need to re-run to fetch fresh/updated data.",
+  },
+  {
+    id: "tour-input",
+    title: "Run a workflow",
+    body: "Pick Keywords or Subreddits, then paste terms (comma or newline-separated) into the box.",
+  },
+  {
+    id: "tour-input-dropdowns",
+    title: "Posts Fetch controls",
+    body: "Subreddit mode: Sort (top/hot/new/best/rising) + Time frame (only used when Sort=top). Keywords mode: Time frame (date window for the search), Sort (relevance vs most upvoted), Posts per keyword (number of posts to fetch for each keyword; multiplies by number of keywords).",
+  },
+];
+
+// Post-run tour over the actual rendered results. Fires only when the user opts in via the
+// post-results toast. Steps target the section wrappers (IDs added below) so the spotlight
+// rings the entire section the user is being taught about.
+const RESULTS_TOUR_STEPS: TourStep[] = [
+  {
+    id: "tour-results-section-1",
+    title: "Selected posts + comments",
+    body: "Posts the LLM chose for commenting. Click ▸ on a card to reveal 2 LLM-written comment suggestions and their PASS/UNSURE/FAIL scores.",
+  },
+  {
+    id: "tour-results-section-2",
+    title: "Reddit / LinkedIn repurposing",
+    body: "Same posts re-scored as YOUR own content. Virality + Fit (1–10), then a bullet strategy for repurposing. SELECT requires both ≥6.",
+  },
+  {
+    id: "tour-results-rejected",
+    title: "Rejected posts",
+    body: "Posts the LLM said NO to during evaluation. Title + meta + summary only — quick-scan to verify what got filtered.",
+  },
+  {
+    id: "tour-prompt-debugger",
+    title: "Prompt Debugger",
+    body: "Every LLM call's full prompt + response is at the bottom — useful when a card looks wrong and you want to see what went in/out.",
+  },
+];
 
 // --- sessionStorage helpers for password persistence across page reloads ---
 const getStoredPassword = (): string | null => sessionStorage.getItem("access_password");
@@ -56,6 +110,40 @@ function PostSourcesLine({ post }: { post: Post }) {
         </span>
       ))}
     </div>
+  );
+}
+
+/** Small purple chip rendered next to PASS/UNSURE/FAIL when Step 2.5 flagged the post as
+ * promotional/launch. The chip text is intentionally generic on the main results page
+ * (the subcategory is preserved on the /promo dashboard, not surfaced here). Tooltip
+ * still exposes the LLM's promo_type + reasoning on hover. */
+function PromoChip({ detection }: { detection: { promo_type: string; reasoning: string } }) {
+  return (
+    <span className="promo-chip" title={`${detection.promo_type}: ${detection.reasoning}`}>
+      Promotional/Launch
+    </span>
+  );
+}
+
+/** Counts + jump-to-anchor link rendered to the RIGHT of each section's filter tabs.
+ * Surfaces the high/low post counts so the user knows at a glance that the low-score
+ * group exists, and offers a smooth scroll to the banner without disturbing the
+ * primary high-score zone above. Renders nothing when there are no low-score posts. */
+function LowScoreJump({ highCount, lowCount, anchorId }: {
+  highCount: number; lowCount: number; anchorId: string;
+}) {
+  if (lowCount === 0) return null;
+  const jump = () => {
+    const el = document.getElementById(anchorId);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  return (
+    <span className="low-score-counts">
+      <span className="low-score-counts-high">{highCount} Posts ≥5 upvotes</span>
+      <button className="low-score-counts-jump" onClick={jump} title="Jump to low-upvote section">
+        {lowCount} Posts with &lt;5 ↓
+      </button>
+    </span>
   );
 }
 
@@ -122,6 +210,15 @@ interface PostValidation {
   };
 }
 
+// Step 2.5 promo verdict; backend tags posts where the author is launching / promoting / mentioning
+// something they built. Used to render a small purple chip on the card and to source the /promo dashboard.
+interface PromotionalDetection {
+  post_id: string;
+  is_promotional: boolean;
+  promo_type: "launch" | "built-something" | "self-promo" | "subtle-mention" | "none";
+  reasoning: string;
+}
+
 interface LLMCall {
   seq: number;
   call_type: string;
@@ -151,6 +248,7 @@ interface TaskResults {
   post_scores: PostScore[];
   post_strategies: PostStrategy[];
   post_validations: PostValidation[];
+  promotional_detections?: PromotionalDetection[];
   error_log: string[];
 }
 
@@ -204,7 +302,7 @@ function PromptDebugger({ calls }: { calls: LLMCall[] }) {
   const grandOut = calls.reduce((s, c) => s + (c.output_tokens || 0), 0);
 
   return (
-    <div className={`prompt-debugger ${open ? "" : "collapsed"}`}>
+    <div id="tour-prompt-debugger" className={`prompt-debugger ${open ? "" : "collapsed"}`}>
       <div className="prompt-debugger-bar" onClick={() => setOpen((o) => !o)}>
         <span>
           🔍 Prompt Debugger — {calls.length} call{calls.length === 1 ? "" : "s"} ·{" "}
@@ -303,8 +401,8 @@ export default function Home() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthChecking, setIsAuthChecking] = useState(true); // true while checking sessionStorage on mount
 
-  // Input state
-  const [inputType, setInputType] = useState<"urls" | "keywords">("urls");
+  // Input state — keywords is the default workflow mode (most common use case)
+  const [inputType, setInputType] = useState<"urls" | "keywords">("keywords");
   const [inputText, setInputText] = useState("");
 
   // Task state
@@ -321,6 +419,13 @@ export default function Home() {
   // Filter state
   const [commentFilter, setCommentFilter] = useState<string>("all");
   const [postFilter, setPostFilter] = useState<string>("all");
+
+  // Post-run results-walkthrough state. The toast fires once per login (sessionStorage
+  // tour_results_toast_seen). If user clicks Yes, we conditionally mount <Tour> which
+  // then runs once per login (sessionStorage tour_results_seen). Both flags use the
+  // tour_* prefix so resetTourFlags() catches them on login + logout.
+  const [showResultsToast, setShowResultsToast] = useState<boolean>(false);
+  const [showResultsTour, setShowResultsTour] = useState<boolean>(false);
 
   // Keyword-mode controls (shipped to backend on /run; ignored in URL mode)
   const [keywordTimeframe, setKeywordTimeframe] = useState<string>("week");
@@ -357,6 +462,8 @@ export default function Home() {
       const data = await res.json();
       if (data.valid) {
         storePassword(passwordInput);
+        // Re-prime the guided tour for every fresh login (clears all `tour_*` session keys)
+        resetTourFlags();
         setIsAuthenticated(true);
         setPasswordInput("");
       } else {
@@ -372,6 +479,8 @@ export default function Home() {
   /** Logout clears session and resets state */
   const handleLogout = () => {
     clearPassword();
+    // Re-prime the tour so re-login (within the same tab session) shows it again
+    resetTourFlags();
     setIsAuthenticated(false);
     setPasswordInput("");
   };
@@ -412,6 +521,32 @@ export default function Home() {
 
     return () => clearInterval(interval);
   }, [taskId, status]);
+
+  // Post-run toast scheduler: 3s after results status flips to "complete", offer the
+  // walkthrough — UNLESS the toast or the tour itself was already dismissed this session.
+  useEffect(() => {
+    if (results?.status !== "complete") return;
+    if (typeof window === "undefined") return;
+    if (sessionStorage.getItem("tour_results_toast_seen") === "1") return;
+    if (sessionStorage.getItem("tour_results_seen") === "1") return;
+    const t = setTimeout(() => setShowResultsToast(true), 3000);
+    return () => clearTimeout(t);
+  }, [results?.status]);
+
+  /** User opted IN to the results walkthrough → mark toast seen, clear tour flag,
+   * mount the Tour. The Tour will then auto-fire on its own mount. */
+  const acceptResultsTour = () => {
+    sessionStorage.setItem("tour_results_toast_seen", "1");
+    sessionStorage.removeItem("tour_results_seen");
+    setShowResultsToast(false);
+    setShowResultsTour(true);
+  };
+  /** User declined → mark BOTH flags so neither toast nor tour fires again this session. */
+  const declineResultsTour = () => {
+    sessionStorage.setItem("tour_results_toast_seen", "1");
+    sessionStorage.setItem("tour_results_seen", "1");
+    setShowResultsToast(false);
+  };
 
   /** GET /history - load list of previous runs into the dropdown */
   const fetchHistory = async () => {
@@ -589,6 +724,15 @@ export default function Home() {
     [results]
   );
 
+  // Get promo verdict for a post by id; returns null when not promotional or not detected
+  const getPromoDetection = useCallback(
+    (postId: string): PromotionalDetection | null => {
+      const d = results?.promotional_detections?.find((x) => x.post_id === postId);
+      return d && d.is_promotional ? d : null;
+    },
+    [results]
+  );
+
   // Filtered data
   const selectedPostsWithComments = results?.generated_comments.filter((gc) => {
     if (commentFilter === "all") return true;
@@ -663,8 +807,11 @@ export default function Home() {
               {post.flair && <span>{post.flair}</span>}
             </div>
           </div>
-          <span className={`tag ${getCommentTag(gc.post_id)}`}>
-            {getCommentTag(gc.post_id)}
+          <span className="tag-group">
+            <span className={`tag ${getCommentTag(gc.post_id)}`}>
+              {getCommentTag(gc.post_id)}
+            </span>
+            {getPromoDetection(gc.post_id) && <PromoChip detection={getPromoDetection(gc.post_id)!} />}
           </span>
         </div>
 
@@ -676,9 +823,12 @@ export default function Home() {
           </div>
         )}
 
-        {lowScore
-          ? <CollapsibleBody label={`Show ${gc.comments.length} comment suggestion${gc.comments.length === 1 ? "" : "s"}`}>{commentList}</CollapsibleBody>
-          : commentList}
+        {/* Comment suggestions are ALWAYS collapsed by default — high- and low-score alike.
+         * The card header (title/sources/meta/tag/summary/why-selected) is what the user
+         * scans; comments expand on demand to keep the page scannable. */}
+        <CollapsibleBody label={`Show ${gc.comments.length} comment suggestion${gc.comments.length === 1 ? "" : "s"}`}>
+          {commentList}
+        </CollapsibleBody>
       </div>
     );
   };
@@ -733,8 +883,11 @@ export default function Home() {
               <span>{post.score} upvotes</span>
             </div>
           </div>
-          <span className={`tag ${getPostTag(ls.post_id)}`}>
-            {getPostTag(ls.post_id)}
+          <span className="tag-group">
+            <span className={`tag ${getPostTag(ls.post_id)}`}>
+              {getPostTag(ls.post_id)}
+            </span>
+            {getPromoDetection(ls.post_id) && <PromoChip detection={getPromoDetection(ls.post_id)!} />}
           </span>
         </div>
 
@@ -796,10 +949,13 @@ export default function Home() {
         <button className="logout-button" onClick={handleLogout}>Logout</button>
       </div>
 
-      {/* Action row: Memory Bank button (left) + History dropdown (right) */}
+      {/* Action row: Memory Bank + Promo Bank (left) + History dropdown (right) */}
       <div className="header-actions">
-        <a href="/memory" className="memory-bank-button">📚 Subreddit Memory Bank</a>
-        <select className="history-select" onChange={(e) => handleHistorySelect(e.target.value)} defaultValue="">
+        <span id="tour-banks" style={{ display: "inline-flex", gap: 12 }}>
+          <a href="/memory" className="memory-bank-button">📚 Subreddit Memory Bank</a>
+          <a href="/promo" className="memory-bank-button promo-bank-button">🚀 Promotional / Launch Bank</a>
+        </span>
+        <select id="tour-history" className="history-select" onChange={(e) => handleHistorySelect(e.target.value)} defaultValue="">
           <option value="">Load previous run...</option>
           {history.map((h) => (
             <option key={h.task_id} value={h.task_id}>
@@ -810,19 +966,10 @@ export default function Home() {
       </div>
 
       {/* Input Section */}
-      <div className="input-section">
+      <div id="tour-input" className="input-section">
         {/* Header row: radios on the left, mode-specific dropdowns on the right (same row) */}
         <div className="input-header">
           <div className="radio-group">
-            <label>
-              <input
-                type="radio"
-                name="inputType"
-                checked={inputType === "urls"}
-                onChange={() => setInputType("urls")}
-              />
-              Subreddits
-            </label>
             <label>
               <input
                 type="radio"
@@ -832,9 +979,18 @@ export default function Home() {
               />
               Keywords
             </label>
+            <label>
+              <input
+                type="radio"
+                name="inputType"
+                checked={inputType === "urls"}
+                onChange={() => setInputType("urls")}
+              />
+              Subreddits
+            </label>
           </div>
 
-          <div className="mode-controls">
+          <div id="tour-input-dropdowns" className="mode-controls">
             {inputType === "urls" ? (
               <>
                 <label>
@@ -927,25 +1083,32 @@ export default function Home() {
       {/* Error Display */}
       {error && <div className="status-bar error">{error}</div>}
 
+      {/* Empty-state placeholder: shown only when no results AND no in-flight run.
+          Replaced by the real <results> block below as soon as the workflow produces data. */}
+      {!results && !status && <ResultsExample />}
+
       {/* Results */}
       {results && (
         <>
           {/* Sections 1 & 2 sit side-by-side (50/50); Section 3 below at full width */}
           <div className="results-row">
-          {/* Section 1: Selected Posts with Comments */}
-          <div className="results-section">
-            <h2>Selected Posts with Comments ({selectedPostsWithComments?.length || 0})</h2>
+          {/* Section 1: Selected Posts with Suggested Comments */}
+          <div id="tour-results-section-1" className="results-section">
+            <h2>Selected Posts with Suggested Comments ({selectedPostsWithComments?.length || 0})</h2>
 
-            <div className="filter-tabs">
-              {["all", "pass", "unsure", "fail"].map((f) => (
-                <button
-                  key={f}
-                  className={`filter-tab ${commentFilter === f ? "active" : ""}`}
-                  onClick={() => setCommentFilter(f)}
-                >
-                  {f.toUpperCase()}
-                </button>
-              ))}
+            <div className="filter-tabs-row">
+              <div className="filter-tabs">
+                {["all", "pass", "unsure", "fail"].map((f) => (
+                  <button
+                    key={f}
+                    className={`filter-tab ${commentFilter === f ? "active" : ""}`}
+                    onClick={() => setCommentFilter(f)}
+                  >
+                    {f.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+              <LowScoreJump highCount={sel.high.length} lowCount={sel.low.length} anchorId="sel-low-banner" />
             </div>
 
             {selectedPostsWithComments?.length === 0 && (
@@ -958,7 +1121,7 @@ export default function Home() {
             {/* Low-score Selected cards — body collapsed by default behind a toggle */}
             {sel.low.length > 0 && (
               <>
-                <div className="low-score-banner">
+                <div id="sel-low-banner" className="low-score-banner">
                   ↓ Below posts have lower upvotes (less than {LOW_SCORE_THRESHOLD})
                 </div>
                 {sel.low.map((gc) => renderSelectedCard(gc, true))}
@@ -967,19 +1130,22 @@ export default function Home() {
           </div>
 
           {/* Section 2: Post Suggestions: For Reddit and LinkedIn */}
-          <div className="results-section">
+          <div id="tour-results-section-2" className="results-section">
             <h2>Post Suggestions: For Reddit and LinkedIn ({postSuggestions?.length || 0})</h2>
 
-            <div className="filter-tabs">
-              {["all", "pass", "unsure", "fail"].map((f) => (
-                <button
-                  key={f}
-                  className={`filter-tab ${postFilter === f ? "active" : ""}`}
-                  onClick={() => setPostFilter(f)}
-                >
-                  {f.toUpperCase()}
-                </button>
-              ))}
+            <div className="filter-tabs-row">
+              <div className="filter-tabs">
+                {["all", "pass", "unsure", "fail"].map((f) => (
+                  <button
+                    key={f}
+                    className={`filter-tab ${postFilter === f ? "active" : ""}`}
+                    onClick={() => setPostFilter(f)}
+                  >
+                    {f.toUpperCase()}
+                  </button>
+                ))}
+              </div>
+              <LowScoreJump highCount={sug.high.length} lowCount={sug.low.length} anchorId="sug-low-banner" />
             </div>
 
             {postSuggestions?.length === 0 && (
@@ -992,7 +1158,7 @@ export default function Home() {
             {/* Low-score Suggestion cards — strategy block collapsed by default behind a toggle */}
             {sug.low.length > 0 && (
               <>
-                <div className="low-score-banner">
+                <div id="sug-low-banner" className="low-score-banner">
                   ↓ Below posts have lower upvotes (less than {LOW_SCORE_THRESHOLD})
                 </div>
                 {sug.low.map((ls) => renderSuggestionCard(ls, true))}
@@ -1002,7 +1168,7 @@ export default function Home() {
           </div>
 
           {/* Section 3: Rejected Posts (full-width below the side-by-side row) */}
-          <div className="results-section">
+          <div id="tour-results-rejected" className="results-section">
             <h2>Rejected Posts ({rejectedPosts?.length || 0})</h2>
 
             {rejectedPosts?.length === 0 && (
@@ -1011,12 +1177,16 @@ export default function Home() {
 
             {rejectedPosts?.map((post) => {
               const postIndex = results.filtered_posts.indexOf(post);
+              const promo = getPromoDetection(post.id);
               return (
                 <div className="post-card" key={post.id} style={{ background: "#f9f9f9" }}>
-                  <div className="post-title">
-                    <a href={post.url} target="_blank" rel="noopener noreferrer">
-                      {post.title}
-                    </a>
+                  <div className="post-header">
+                    <div className="post-title">
+                      <a href={post.url} target="_blank" rel="noopener noreferrer">
+                        {post.title}
+                      </a>
+                    </div>
+                    {promo && <PromoChip detection={promo} />}
                   </div>
                   <div className="post-meta">
                     <span>r/{post.subreddit}</span>
@@ -1046,6 +1216,27 @@ export default function Home() {
       {/* Bottom-of-page collapsible Prompt Debugger (only when llm_calls present on this run) */}
       {results?.llm_calls && results.llm_calls.length > 0 && (
         <PromptDebugger calls={results.llm_calls} />
+      )}
+
+      {/* Guided tour — fires after every login (sessionStorage gated) */}
+      <Tour steps={MAIN_TOUR_STEPS} storageKey="tour_main_seen" />
+
+      {/* Post-run toast: appears 3s after first results.complete render this session */}
+      {showResultsToast && (
+        <div className="results-toast" role="dialog">
+          <div className="results-toast-msg">
+            🎯 Your results are ready. Want a 30-second walkthrough of the layout — what each section does, the filters, and where to look first?
+          </div>
+          <div className="results-toast-controls">
+            <button onClick={declineResultsTour}>No thanks</button>
+            <button className="results-toast-yes" onClick={acceptResultsTour}>Yes, show me</button>
+          </div>
+        </div>
+      )}
+
+      {/* Post-run results tour — only mounted when user opts in via the toast */}
+      {showResultsTour && (
+        <Tour steps={RESULTS_TOUR_STEPS} storageKey="tour_results_seen" />
       )}
     </div>
   );

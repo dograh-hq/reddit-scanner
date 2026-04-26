@@ -96,7 +96,7 @@ async def run_workflow(task_id: str, input_type: str, inputs: list[str],
         if promo_yes:
             try:
                 rows = _build_promo_rows(promo_yes, all_posts, task.task_id)
-                storage.save_promotional_posts(rows)
+                storage.save_promotional_posts(rows, source_input_type=task.input_type)
             except Exception as e:
                 logger.error(f"[WORKFLOW] Promo archive save failed (non-fatal): {e}")
                 task.error_log.append(f"Promotional archive save failed: {e}")
@@ -461,7 +461,7 @@ def _collect_memory_bank(task: TaskData) -> int:
                 "source_task_id": task.task_id,
             })
 
-    return storage.save_memory_posts(rows)
+    return storage.save_memory_posts(rows, source_input_type=task.input_type)
 
 
 def _build_promo_rows(detections: list[dict], all_posts: list[dict], task_id: str) -> list[dict]:
@@ -514,7 +514,7 @@ def _backfill_promo_validation_tags(task: TaskData) -> int:
     best: dict[str, str] = {}
     for cv in task.comment_validations or []:
         pid = cv.get("post_id")
-        if pid not in promo_ids:
+        if not isinstance(pid, str) or pid not in promo_ids:
             continue
         for v in cv.get("validations") or []:
             tag = (v.get("tag") or "").lower()
@@ -522,7 +522,7 @@ def _backfill_promo_validation_tags(task: TaskData) -> int:
                 best[pid] = tag
     for pv in task.post_validations or []:
         pid = pv.get("post_id")
-        if pid not in promo_ids:
+        if not isinstance(pid, str) or pid not in promo_ids:
             continue
         tag = ((pv.get("validation") or {}).get("tag") or "").lower()
         if tag in ("pass", "unsure", "fail") and _rank(tag) > _rank(best.get(pid, "")):

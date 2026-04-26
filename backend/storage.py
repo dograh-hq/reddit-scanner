@@ -91,6 +91,9 @@ class SqliteStorage:
         DB_PATH.parent.mkdir(exist_ok=True)
         self._init_db()
         self._load_all()
+        # Backfill source_input_type for any pre-migration bank rows whose source_task_id
+        # is still in the loaded tasks. Older rows stay NULL → counted only in `total`, not `unbiased`.
+        self._backfill_source_input_type()
 
     def _conn(self) -> sqlite3.Connection:
         # autocommit (isolation_level=None); per-call connection is simplest and thread-safe
@@ -185,6 +188,47 @@ class SqliteStorage:
             c.execute("CREATE INDEX IF NOT EXISTS idx_pp_tag      ON promotional_posts(validation_tag)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_pp_type     ON promotional_posts(promo_type)")
 
+            # ===== Migration: source_input_type column =====
+            # Tags each bank row with the run's discovery mode ("urls" vs "keywords") so the
+            # dashboards can compute an UNBIASED aggregate (keyword_count) alongside the total.
+            # ALTERs are wrapped because re-runs against an already-migrated DB would error.
+            for table in ("memory_posts", "promotional_posts"):
+                try:
+                    c.execute(f"ALTER TABLE {table} ADD COLUMN source_input_type TEXT")
+                    print(f"[STORAGE] Added source_input_type column to {table}")
+                except sqlite3.OperationalError:
+                    pass  # column already exists — re-run, no-op
+            c.execute("CREATE INDEX IF NOT EXISTS idx_mp_sub_source ON memory_posts(subreddit, source_input_type)")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_pp_source     ON promotional_posts(source_input_type)")
+
+    def _backfill_source_input_type(self) -> None:
+        """One-time backfill: walk loaded tasks and fill source_input_type on bank rows
+        whose source_task_id matches a still-cached task. Called after _load_all().
+        Older rows whose source task aged out stay NULL and are treated as "unknown".
+        Safe to re-run — only updates rows where source_input_type IS NULL."""
+        if not self._tasks:
+            return
+        try:
+            with self._lock, self._conn() as c:
+                total_mp, total_pp = 0, 0
+                for tid, t in self._tasks.items():
+                    cur = c.execute(
+                        "UPDATE memory_posts SET source_input_type = ? "
+                        "WHERE source_task_id = ? AND source_input_type IS NULL",
+                        (t.input_type, tid),
+                    )
+                    total_mp += cur.rowcount
+                    cur = c.execute(
+                        "UPDATE promotional_posts SET source_input_type = ? "
+                        "WHERE source_task_id = ? AND source_input_type IS NULL",
+                        (t.input_type, tid),
+                    )
+                    total_pp += cur.rowcount
+                if total_mp or total_pp:
+                    print(f"[STORAGE] Backfilled source_input_type on {total_mp} memory_posts + {total_pp} promotional_posts rows")
+        except Exception as e:
+            print(f"[STORAGE] backfill failed (non-fatal): {e}")
+
     def _load_all(self) -> None:
         """Load all non-expired tasks into memory on startup."""
         cutoff = (datetime.utcnow() - timedelta(days=self.retention_days)).isoformat()
@@ -276,13 +320,18 @@ class SqliteStorage:
 
     # ---------- Memory Bank: permanent PASS/UNSURE post archive ----------
 
-    def save_memory_posts(self, rows: list[dict]) -> int:
+    def save_memory_posts(self, rows: list[dict], source_input_type: str) -> int:
         """
         Insert qualifying posts into memory_posts (idempotent on (post_id, subreddit)).
         Each canonical post may produce multiple rows — one per subreddit it was found in (cross-posts).
         Bumps memory_subreddits rollup only for newly-inserted rows; ALWAYS refreshes the
         subreddit_subscribers count on the rollup so the latest known value wins.
         Returns count of rows actually inserted (not duplicates).
+
+        `source_input_type` ∈ {"urls","keywords"} tags the row with how this batch was discovered;
+        powers the unbiased keyword-only count on the dashboard. INSERT OR IGNORE preserves
+        first-seen value on conflict (a post first found via URL stays tagged "urls" even if
+        re-discovered later via keywords).
         """
         if not rows:
             return 0
@@ -295,15 +344,15 @@ class SqliteStorage:
                         """INSERT OR IGNORE INTO memory_posts
                            (post_id, subreddit, subreddit_subscribers, permalink, title, flair,
                             summary, upvotes, num_comments, created_utc, tag, qualifying_gate,
-                            source_task_id, saved_at)
-                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                            source_task_id, saved_at, source_input_type)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (r["post_id"], r["subreddit"],
                          int(r.get("subreddit_subscribers") or 0),
                          r["permalink"], r["title"],
                          r.get("flair"), r.get("summary"),
                          int(r.get("upvotes") or 0), int(r.get("num_comments") or 0),
                          r.get("created_utc"), r["tag"], r["qualifying_gate"],
-                         r["source_task_id"], now),
+                         r["source_task_id"], now, source_input_type),
                     )
                     is_new = cur.rowcount == 1
                     if is_new:
@@ -329,28 +378,48 @@ class SqliteStorage:
         return inserted
 
     def list_memory_subreddits(self, page: int = 1, page_size: int = 25,
-                               order: str = "desc", sort_by: str = "posts") -> dict:
-        """Paginated list of subreddits. Default sort: post_count DESC.
-        `sort_by` = 'posts' (default) | 'members' — whitelisted to avoid SQL injection."""
-        order = "DESC" if order.lower() == "desc" else "ASC"
-        sort_col = {"posts": "post_count", "members": "subreddit_subscribers"}.get(sort_by, "post_count")
+                               order: str = "desc", sort_by: str = "keyword_finds") -> dict:
+        """Paginated list of subreddits. Default sort: keyword_count DESC (the unbiased view —
+        only counts posts discovered via keyword fetches, which have no subreddit pre-selection).
+        `sort_by` ∈ {'keyword_finds' (default) | 'posts' | 'members'} — whitelisted.
+
+        EVERY response row carries BOTH `post_count` (total) and `keyword_count` (unbiased)
+        regardless of which sort is active, so the frontend can render both numbers side-by-side.
+        """
+        order_kw = "DESC" if order.lower() == "desc" else "ASC"
+        sort_col = {
+            "keyword_finds": "keyword_count",
+            "posts": "post_count",
+            "members": "subreddit_subscribers",
+        }.get(sort_by, "keyword_count")
         offset = max(0, (page - 1)) * page_size
+        # LEFT JOIN with the per-sub keyword count derived from memory_posts. COALESCE so
+        # subreddits that have only URL-mode posts (and thus no row in the keyword grouping)
+        # still surface with keyword_count=0, sorted last by the tiebreaker.
+        sql = f"""
+            SELECT s.subreddit, s.subreddit_subscribers, s.post_count, s.last_saved_at,
+                   COALESCE(k.keyword_count, 0) AS keyword_count
+            FROM memory_subreddits s
+            LEFT JOIN (
+                SELECT subreddit, COUNT(*) AS keyword_count
+                FROM memory_posts
+                WHERE source_input_type = 'keywords'
+                GROUP BY subreddit
+            ) k ON k.subreddit = s.subreddit
+            ORDER BY {sort_col} {order_kw}, s.subreddit ASC
+            LIMIT ? OFFSET ?
+        """
         with self._lock, self._conn() as c:
             total = c.execute("SELECT COUNT(*) FROM memory_subreddits").fetchone()[0]
-            rows = c.execute(
-                f"""SELECT subreddit, subreddit_subscribers, post_count, last_saved_at
-                    FROM memory_subreddits
-                    ORDER BY {sort_col} {order}, subreddit ASC
-                    LIMIT ? OFFSET ?""",
-                (page_size, offset),
-            ).fetchall()
+            rows = c.execute(sql, (page_size, offset)).fetchall()
         return {
             "page": page,
             "page_size": page_size,
             "total": total,
             "items": [
-                {"subreddit": s, "subreddit_subscribers": subs, "post_count": pc, "last_saved_at": ls}
-                for (s, subs, pc, ls) in rows
+                {"subreddit": s, "subreddit_subscribers": subs, "post_count": pc,
+                 "last_saved_at": ls, "keyword_count": kc}
+                for (s, subs, pc, ls, kc) in rows
             ],
         }
 
@@ -399,11 +468,13 @@ class SqliteStorage:
 
     # ---------- Promotional/Launch archive: permanent style-reference collection ----------
 
-    def save_promotional_posts(self, rows: list[dict]) -> int:
+    def save_promotional_posts(self, rows: list[dict], source_input_type: str) -> int:
         """Insert promo-tagged posts (idempotent on post_id). Re-detection of the same post
         UPDATES the metadata (upvotes / num_comments may have grown) but preserves the
-        existing validation_tag (set later by update_promotional_validation).
-        Returns count of newly-inserted rows.
+        existing validation_tag (set later by update_promotional_validation) AND the
+        existing source_input_type (first-seen wins — see comment in INSERT block).
+        Returns count of NEWLY-inserted rows (not updates) — SQLite's UPSERT reports
+        rowcount=1 for both INSERT and UPDATE, so we explicitly probe with a SELECT first.
         """
         if not rows:
             return 0
@@ -412,28 +483,36 @@ class SqliteStorage:
         try:
             with self._lock, self._conn() as c:
                 for r in rows:
-                    cur = c.execute(
+                    # Probe before the UPSERT so we can distinguish INSERT from UPDATE
+                    pre = c.execute(
+                        "SELECT 1 FROM promotional_posts WHERE post_id = ?",
+                        (r["post_id"],),
+                    ).fetchone()
+                    is_new = pre is None
+                    c.execute(
                         """INSERT INTO promotional_posts
                            (post_id, title, body_excerpt, permalink, primary_subreddit,
                             subreddit_sources, author, flair, upvotes, num_comments,
                             created_utc, promo_type, promo_reasoning, validation_tag,
-                            source_task_id, detected_at)
-                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                            source_task_id, detected_at, source_input_type)
+                           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                            ON CONFLICT(post_id) DO UPDATE SET
                                upvotes        = excluded.upvotes,
                                num_comments   = excluded.num_comments,
                                promo_type     = excluded.promo_type,
                                promo_reasoning= excluded.promo_reasoning,
                                subreddit_sources = excluded.subreddit_sources""",
+                        # NOTE: source_input_type intentionally OMITTED from DO UPDATE SET — first-seen
+                        # mode wins (matches the existing detected_at / source_task_id preservation).
                         (r["post_id"], r["title"], r.get("body_excerpt"), r["permalink"],
                          r["primary_subreddit"], json.dumps(r.get("subreddit_sources") or []),
                          r.get("author"), r.get("flair"),
                          int(r.get("upvotes") or 0), int(r.get("num_comments") or 0),
                          r.get("created_utc"), r["promo_type"], r.get("promo_reasoning"),
                          r.get("validation_tag"),  # usually None at detect time
-                         r["source_task_id"], now),
+                         r["source_task_id"], now, source_input_type),
                     )
-                    if cur.rowcount == 1:
+                    if is_new:
                         inserted += 1
         except Exception as e:
             print(f"[STORAGE] save_promotional_posts failed: {e}")
@@ -458,13 +537,18 @@ class SqliteStorage:
     def list_promotional_posts(self, page: int = 1, page_size: int = 25,
                                sort_by: str = "upvotes", order: str = "desc",
                                tag_filter: str = "all", promo_type: str = "all",
+                               subreddit: str | None = None,
                                q: str | None = None) -> dict:
         """Paginated list of promo posts with sort + filters + title search.
         tag_filter: all | pass | unsure | fail | unrated (=NULL — not yet validated)
         promo_type: all | launch | built-something | self-promo | subtle-mention
+        subreddit: filter posts whose subreddit_sources contains the given subreddit
+                   (cross-posts match if ANY source equals it). Case-insensitive.
         """
+        # `detected_at` was removed as a sort option (it's just "when the workflow ran" — not
+        # meaningful as a style-reference dimension); created_utc covers freshness instead.
         sort_col = {"upvotes": "upvotes", "comments": "num_comments",
-                    "date": "created_utc", "detected": "detected_at"}.get(sort_by, "upvotes")
+                    "date": "created_utc"}.get(sort_by, "upvotes")
         order_kw = "DESC" if order.lower() == "desc" else "ASC"
         where: list[str] = []
         params: list = []
@@ -476,6 +560,14 @@ class SqliteStorage:
         if promo_type in ("launch", "built-something", "self-promo", "subtle-mention"):
             where.append("promo_type = ?")
             params.append(promo_type)
+        if subreddit:
+            # Use SQLite's json_each to expand subreddit_sources and match if ANY source's
+            # subreddit equals the filter value. Case-insensitive (Reddit normalizes anyway).
+            where.append(
+                "EXISTS (SELECT 1 FROM json_each(promotional_posts.subreddit_sources) je "
+                "WHERE LOWER(json_extract(je.value, '$.subreddit')) = LOWER(?))"
+            )
+            params.append(subreddit)
         if q:
             where.append("title LIKE ?")
             params.append(f"%{q}%")
@@ -507,6 +599,25 @@ class SqliteStorage:
                 "validation_tag": r[13], "source_task_id": r[14], "detected_at": r[15],
             })
         return {"page": page, "page_size": page_size, "total": total, "items": items}
+
+    def list_promotional_subreddits(self) -> list[dict]:
+        """Aggregate counts of promo posts per subreddit, summed across cross-post sources.
+        Returns BOTH `keyword_count` (unbiased — only posts discovered via keyword fetches)
+        and `total_count` (all sources). Sorted by keyword_count DESC, with total_count as
+        tiebreaker, then alphabetical. Powers the /promo dashboard subreddit dropdown which
+        labels each option `r/X (N unbiased · M total)`.
+        """
+        with self._lock, self._conn() as c:
+            rows = c.execute(
+                """SELECT json_extract(je.value, '$.subreddit') AS sub,
+                          COUNT(*) AS total_count,
+                          SUM(CASE WHEN p.source_input_type = 'keywords' THEN 1 ELSE 0 END) AS keyword_count
+                   FROM promotional_posts p, json_each(p.subreddit_sources) je
+                   WHERE sub IS NOT NULL AND sub != ''
+                   GROUP BY sub
+                   ORDER BY keyword_count DESC, total_count DESC, sub ASC"""
+            ).fetchall()
+        return [{"subreddit": s, "keyword_count": kc, "total_count": tc} for (s, tc, kc) in rows]
 
 
 # Singleton instance with retention from config

@@ -2,9 +2,29 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { Tour, type TourStep } from "../Tour";
+
+// Tour for /memory — primary insight is "rows are clickable accordions"
+const MEMORY_TOUR_STEPS: TourStep[] = [
+  {
+    id: "tour-pagination",
+    title: "Pagination",
+    body: "20 subreddits per page. Same Prev / Next mirrored at the bottom — use whichever is closer.",
+  },
+  {
+    id: "tour-mem-toolbar",
+    title: "Sort subreddits",
+    body: "Default = Keyword finds (unbiased): posts discovered via blind keyword fetches with no subreddit pre-selection. Descending order = where promo-relevant content actually lives. Switch to Posts (total) or Members for the other views.",
+  },
+  {
+    id: "tour-mem-list",
+    title: "Rows expand on click",
+    body: "Each row shows '<unbiased> · <total>' counts. Click anywhere to view the subreddit's PASS/UNSURE posts; inside, sort by comments / upvotes / date and search titles.",
+  },
+];
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8007";
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 20;
 
 // Reused sessionStorage key from page.tsx (must stay in sync)
 const getStoredPassword = (): string | null => sessionStorage.getItem("access_password");
@@ -12,7 +32,8 @@ const getStoredPassword = (): string | null => sessionStorage.getItem("access_pa
 interface SubRow {
   subreddit: string;
   subreddit_subscribers: number;
-  post_count: number;
+  post_count: number;       // total: counts every PASS/UNSURE post regardless of fetch mode
+  keyword_count: number;    // unbiased: counts only posts found via keyword fetches (no subreddit pre-selection)
   last_saved_at: string;
 }
 
@@ -62,7 +83,8 @@ export default function MemoryPage() {
   const [subs, setSubs] = useState<SubRow[]>([]);
   const [subTotal, setSubTotal] = useState(0);
   const [subPage, setSubPage] = useState(1);
-  const [subSort, setSubSort] = useState<"posts" | "members">("posts");
+  // Default sort = keyword_finds (matches backend default; unbiased view by design)
+  const [subSort, setSubSort] = useState<"keyword_finds" | "posts" | "members">("keyword_finds");
   const [subOrder, setSubOrder] = useState<"desc" | "asc">("desc");
   const [subLoading, setSubLoading] = useState(false);
 
@@ -149,15 +171,32 @@ export default function MemoryPage() {
     );
   }
 
+  // Pre-compute total pages for the top pager — same math as the bottom pager.
+  const subTotalPages = Math.max(1, Math.ceil(subTotal / PAGE_SIZE));
+
   return (
     <div className="memory-container">
       <a href="/" className="back-link">← Back to runs</a>
-      <h1>Subreddit Memory Bank</h1>
+      <div className="page-header-row">
+        <h1>Subreddit Memory Bank</h1>
+        {/* Top pager — always rendered (Prev/Next disable when only 1 page) so the user
+            always sees the pagination affordance. ID drives the guided-tour step. */}
+        <div id="tour-pagination" className="memory-pager memory-pager-top" title="20 subreddits per page — Prev / Next to navigate. Same pager mirrored at the bottom.">
+          <button disabled={subPage <= 1} onClick={() => setSubPage((p) => p - 1)}>← Prev</button>
+          <span>Page {subPage} of {subTotalPages}</span>
+          <button
+            disabled={subPage >= subTotalPages}
+            onClick={() => setSubPage((p) => p + 1)}
+          >
+            Next →
+          </button>
+        </div>
+      </div>
 
-      <div className="memory-toolbar">
+      <div id="tour-mem-toolbar" className="memory-toolbar">
         <div className="posts-toolbar" style={{ margin: 0 }}>
           <span className="posts-label">Sort by:</span>
-          {(["posts", "members"] as const).map((k) => (
+          {(["keyword_finds", "posts", "members"] as const).map((k) => (
             <button
               key={k}
               className={`posts-sort ${subSort === k ? "active" : ""}`}
@@ -167,7 +206,7 @@ export default function MemoryPage() {
                 else { setSubSort(k); setSubOrder("desc"); }
               }}
             >
-              {k === "posts" ? "Posts" : "Members"}
+              {k === "keyword_finds" ? "Keyword finds (unbiased)" : k === "posts" ? "Posts" : "Members"}
               {subSort === k && <span> {subOrder === "desc" ? "↓" : "↑"}</span>}
             </button>
           ))}
@@ -184,6 +223,7 @@ export default function MemoryPage() {
         </div>
       )}
 
+      <div id="tour-mem-list">
       {subs.map((s) => (
         <div key={s.subreddit} className="sub-accordion">
           <button className="sub-row" onClick={() => toggleSub(s.subreddit)}>
@@ -192,9 +232,11 @@ export default function MemoryPage() {
               <span className="sub-subscribers"> · {fmtK(s.subreddit_subscribers)} members</span>
             </span>
             <span className="sub-meta">
-              {s.post_count} post{s.post_count === 1 ? "" : "s"}
+              {/* Unbiased on the LEFT, total on the RIGHT — matches the dashboard's default sort */}
+              <strong>{s.keyword_count}</strong> unbiased · {s.post_count} total
               {" · last "}{new Date(s.last_saved_at).toLocaleDateString()}
             </span>
+            <span className="sub-hint">{openSub === s.subreddit ? "Click to collapse" : "Click to view posts"}</span>
             <span className={openSub === s.subreddit ? "chev open" : "chev"}>›</span>
           </button>
           {openSub === s.subreddit && (
@@ -207,8 +249,10 @@ export default function MemoryPage() {
         </div>
       ))}
 
-      {/* Pager for subreddit list */}
-      <div className="memory-pager">
+      </div>
+
+      {/* Pager for subreddit list (bottom mirror of the top pager) */}
+      <div className="memory-pager" title="20 subreddits per page — also available at the top right of the page heading">
         <button disabled={subPage <= 1} onClick={() => setSubPage((p) => p - 1)}>← Previous</button>
         <span>Page {subPage}</span>
         <button
@@ -218,6 +262,8 @@ export default function MemoryPage() {
           Next →
         </button>
       </div>
+
+      <Tour steps={MEMORY_TOUR_STEPS} storageKey="tour_memory_seen" />
     </div>
   );
 }

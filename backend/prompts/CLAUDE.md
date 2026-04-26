@@ -5,6 +5,7 @@ Each file contains a prompt template with placeholders for dynamic content. 4 of
 
 <file_map>
 ## FILE MAP
+- `promotional_detection.txt` - BATCHED Step 2.5: tag each post is_promotional + promo_type (launch/built-something/self-promo/subtle-mention/none)
 - `comment_evaluation.txt` - BATCHED YES/NO decisions for commenting (per-post)
 - `comment_generation.txt` - Per-post: generate 2 comments with sample references
 - `comment_validation.txt` - BATCHED: score + tag both comments per post (0-100)

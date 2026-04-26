@@ -1,5 +1,128 @@
 # CHANGES.md
 
+## 2026-04-27 - Unbias the bank aggregates: keyword-finds counter as default sort
+
+### The bias problem
+Per-subreddit counts in both Memory Bank and Promo Bank were inflated by URL-mode runs. `r/SaaS: 50 promos` could mean "r/SaaS is genuinely promo-heavy" OR "the user fetched r/SaaS 5 times" — indistinguishable. Keyword-mode runs are bias-free (Reddit's keyword search has no subreddit pre-selection); URL-mode runs are biased by fetch frequency.
+
+### Fix
+Maintain a separate counter — posts discovered via keyword fetches only — alongside the existing total. Surface this UNBIASED counter as the default sort on both dashboards. Show both numbers side-by-side in subreddit labels: `5 unbiased · 12 total`.
+
+### Backend
+- **Schema migration** (`backend/storage.py:_init_db`): `ALTER TABLE memory_posts ADD COLUMN source_input_type TEXT` and same for `promotional_posts`. Wrapped in `try/except OperationalError` so re-runs are no-ops. New indices: `idx_mp_sub_source`, `idx_pp_source`.
+- **One-time backfill** (`_backfill_source_input_type`): walks the in-memory `_tasks` cache after `_load_all()` runs, populates `source_input_type` for bank rows whose `source_task_id` is still cached. Older rows (source task aged out) stay NULL → counted in `total` but NOT `unbiased`. Verified live: backfilled 35 memory_posts + 32 promotional_posts on first restart.
+- **`save_memory_posts(rows, source_input_type)` / `save_promotional_posts(rows, source_input_type)`** — required new arg. `source_input_type` is intentionally OMITTED from the promo UPSERT's `DO UPDATE SET` (first-seen mode wins, matching `detected_at` / `source_task_id` preservation).
+- **`list_memory_subreddits(..., sort_by="keyword_finds")`** — new default. Whitelist is now `keyword_finds | posts | members`. Always LEFT JOINs a derived per-sub keyword count from `memory_posts WHERE source_input_type='keywords'` so EVERY response row carries both `post_count` (total) and `keyword_count` (unbiased) regardless of the active sort.
+- **`list_promotional_subreddits()`** — response shape changed from `[{subreddit, count}]` to `[{subreddit, keyword_count, total_count}]`. Single query with `SUM(CASE WHEN source_input_type = 'keywords' ...)`. Sorted by `keyword_count DESC, total_count DESC, sub ASC`.
+- **`backend/workflow.py`**: `_collect_memory_bank` and the Step 2.5 promo persistence call both pass `task.input_type` through to the new `source_input_type` arg.
+- **`backend/main.py`**: `/memory/subreddits` default `sort_by` is now `"keyword_finds"`; `/promotional/subreddits` returns the new shape.
+
+### Frontend
+- **`/memory`**: sort buttons array becomes `["keyword_finds", "posts", "members"]` with `keyword_finds` first + default. Active label: `Keyword finds (unbiased)`. Per-sub row meta line changed from `12 posts · last <date>` to `<bold>5</bold> unbiased · 12 total · last <date>` (unbiased on the LEFT).
+- **`/promo`**: subreddit dropdown options now show `r/SaaS (7 unbiased · 35 total)`, sorted server-side by unbiased count desc. The `All subreddits` option likewise shows summed `unbiased · total`.
+- **Tours**: `/memory` and `/promo` tour steps rewritten to explain the unbiased / "blind fetch" concept and why the default sort exists.
+
+### No backward-compatibility concerns
+This project is in dev — old API param values + response shapes were replaced cleanly without legacy aliases. Per user preference: "no need to do anything for backward compatibility."
+
+### Verification
+- Backend smoke: 5-row hermetic test inserted SmokeKw (keywords mode) + SmokeUrl (urls mode); `list_memory_subreddits(sort_by="keyword_finds")` returned SmokeKw above SmokeUrl as expected. Promo aggregate same — SmokeKw with keyword_count=1 sorted above SmokeUrl with keyword_count=0. All checks passed.
+- Frontend `npx tsc --noEmit`: clean.
+
+---
+
+## 2026-04-27 - Tour text trimmed + input-control tooltips + pagination tooltips + results-area placeholder + post-run walkthrough toast
+
+### Tour gating (verified — no changes needed)
+Audited the auth + sessionStorage flow. Tours fire **once per login** thanks to:
+- `tour_*` flags in sessionStorage (auto-cleared on tab close, manually cleared on `handleLogin` + `handleLogout` via `resetTourFlags`)
+- Auto-verify on mount calls `setIsAuthenticated(true)` WITHOUT touching tour flags, so refresh + navigation don't re-trigger
+- The Tour component reads its flag once on mount; if "1" it returns early and never re-fires for the lifetime of the component
+- All new flags use the `tour_*` prefix so `resetTourFlags()` (which loops sessionStorage and removes anything starting with `tour_`) catches them automatically
+- No backend / JWT involvement — gating is purely browser-side
+
+### Frontend
+- **All tour step text shortened** — dropped verbose phrasing (e.g. "the 7-day cleanup never touches them"), kept the punchy core. Each step now ~1–2 short sentences.
+- **Native title-attr tooltips on input controls**: every keyword-mode and URL-mode dropdown (Sort, Time frame, Posts per keyword) plus their wrapping `<label>` carries a hover tooltip explaining what the option does.
+- **Pagination tooltips** on top + bottom pagers in `/memory` and `/promo` (e.g. `20 promo posts per page — also available at the top right of the page heading`).
+- **Verified `/memory` top-right pagination**: confirmed in `memory/page.tsx:173-187` — wrapped in `.page-header-row`, only renders when `subTotal > PAGE_SIZE`. Bottom pager retained for redundancy.
+- **`<ResultsExample>` placeholder** (new file): annotated example layout shown when `!results && !status`. Mirrors the real Selected / Suggestions / Rejected sections with explainer captions baked into the JSX (post-card with dashed border, callout strips after each anchor element). Replaced by real results the moment the workflow produces data.
+- **Post-run results-tour toast**: 3 seconds after `results.status` becomes `"complete"` for the first time this session, a fixed-position toast (`.results-toast`) prompts the user with `Yes, show me` / `No thanks`. Yes mounts `<Tour>` over the actual rendered sections (`tour-results-section-1` / `-section-2` / `-rejected` / `tour-prompt-debugger`). Both decisions persist via `tour_results_toast_seen` + `tour_results_seen` so neither fires again this session. Both flags cleared on next login/logout.
+
+---
+
+## 2026-04-27 - Promo refinements (round 2): top pagination, expandable-row cue, login tour, idempotency-counter fix
+
+### Backend fix
+- **`storage.save_promotional_posts` idempotency counter** was overcounting re-inserts because SQLite's UPSERT (`INSERT ... ON CONFLICT DO UPDATE`) reports `cur.rowcount = 1` for both INSERT and UPDATE paths. The actual DB state was correct (no duplicate rows because `post_id` is the PK), but the returned count and the workflow log line `archived N new PASS/UNSURE posts` was misleading. Fix: SELECT-probe each `post_id` BEFORE the UPSERT to determine `is_new`. Verified: re-insert now correctly returns 0.
+
+### Backend verified
+- **Subreddit aggregate + filter cross-post correctness** — comprehensive 5-row test fixture exercising 3-way crossposts, 1-source posts, idempotent re-inserts, case-insensitive filter, empty `subreddit_sources`, and empty-string source names. All checks pass: a single post crossposted to 3 subreddits contributes +1 to each subreddit's count AND appears in each subreddit's filter result. Empty/null sources are correctly excluded by the WHERE clause. Combined `subreddit + promo_type` filter returns the correct intersection.
+
+### Frontend
+- **Count badge text** now reads `6 Posts ≥5 upvotes  9 Posts with <5 ↓` (was `6 ≥5 upvotes · 9 with <5 ↓`); separator dot dropped.
+- **Promotional/Launch Bank button** changed to amber (`#d97706`) so the two banks are visually distinct from the main page header.
+- **Subreddit Memory Bank rows** got a much more obvious accordion affordance: 4px indigo left-border accent, indigo subreddit name (link-blue), italic "Click to view posts" / "Click to collapse" hint next to the chevron, hover state with deeper indigo + 1px translateX, focus-visible outline. The chevron is now a circular indigo pill.
+- **Top pagination** added to both `/memory` and `/promo` — sits to the right of the page title (`<div class="page-header-row">` wrapper). Compact variant (`memory-pager-top`) of the existing pager. Bottom pagination kept for redundancy.
+- **`PAGE_SIZE` reduced from 25 → 20** on both bank dashboards (per user preference; backend accepts whatever the frontend sends).
+- **Promo type filter buttons further shrunk** (font 9px, padding 2px 5px) AND display labels shortened: `BUILT-SOMETHING` → `BUILT`, `SELF-PROMO` → `PROMO`, `SUBTLE-MENTION` → `SUBTLE`. Canonical filter values sent to the API are unchanged. `title` attribute exposes the full label on hover. The 5 buttons now fit on one line with the subreddit dropdown.
+- **Guided login tour** (`Tour.tsx` + per-page step lists). Spotlight effect via huge `box-shadow` cutout + indigo pulsing ring around the highlighted element. Popup card with Step N of M / title / body / Skip / Back / Next controls. Steps whose target IDs aren't on the page are auto-skipped. Per-page sessionStorage flags (`tour_main_seen` / `tour_memory_seen` / `tour_promo_seen`) cleared on every login + logout via `resetTourFlags()`. Main-page tour highlights banks row → history dropdown → input section. /memory tour explains the toolbar + clickable rows. /promo tour pays special attention to the **subreddit filter** (cross-post-aware counting), then promo-type and search.
+
+---
+
+## 2026-04-27 - Comments collapsed by default + low-score jump badge + section rename
+
+### Frontend
+- **Section 1 renamed**: `Selected Posts with Comments` → `Selected Posts with Suggested Comments`.
+- **Comment suggestions now collapsed by default for ALL Selected cards** (not just <5 upvote ones). Header — title, sources, meta, tag, summary, "Why selected" — stays visible; the comment-box list expands on demand. Suggestions section (Section 2) is unchanged: high-score expanded, low-score collapsed.
+- **`<LowScoreJump>` badge** rendered on the RIGHT of each section's filter-tab row, e.g. `8 ≥5 upvotes · 12 with <5 ↓`. The `<5` half is a click-to-scroll-anchor that lands on the section's `low-score-banner` div (`sel-low-banner` / `sug-low-banner`). Surfaces the low-signal count without disturbing the high-signal hierarchy. New `.filter-tabs-row` wrapper + `.low-score-counts*` styles.
+
+---
+
+## 2026-04-27 - Promo dashboard refinements + Keywords-default
+
+### Frontend
+- **Simpler chip text** on the run results page: `Promotional/Launch` always (no subcategory in the chip, smaller font). The subcategory + LLM reasoning still surface on hover via the title attribute, AND remain visible as colored badges on the `/promo` dashboard cards.
+- **Removed `detected` sort** from `/promo` — it just reflected workflow run time; not meaningful for a style-reference bank. `Date` (the post's `created_utc`) covers freshness.
+- **Toolbar consolidated**: validation tag filters now share the sort row; subreddit dropdown (LEFT) + smaller promo-type buttons (RIGHT) share a second row with the title search.
+- **Subreddit filter dropdown** populated from the new `GET /promotional/subreddits` endpoint. Options sorted by promo-post count DESC, formatted as `r/SaaS (12 Promotions)`. Works across cross-posts (a post matches if ANY of its `subreddit_sources` equals the picked subreddit).
+- **Main page radio order swapped**: Keywords first and now the default mode (most common use).
+
+### Backend
+- `storage.list_promotional_posts(..., subreddit=...)` adds an `EXISTS … json_each(subreddit_sources)` subquery for case-insensitive cross-post matching.
+- `storage.list_promotional_subreddits()` aggregates promo-post counts per subreddit by expanding the `subreddit_sources` JSON via SQLite's `json_each`, GROUP BY subreddit, ORDER BY count DESC.
+- `GET /promotional` accepts `subreddit` param; new `GET /promotional/subreddits` returns the dropdown source.
+
+---
+
+## 2026-04-27 - Promotional / Launch detection (Step 2.5) + dedicated archive dashboard
+
+### Reason
+Self-promotion and launch posts on Reddit follow specific subtle styles (founders rarely write outright "buy my product" — the high-performing ones are stories with name-drops, "I built X" posts, or feedback asks where the project URL slips in). The user wants a permanent collection of these as style references for our own promotional posts. Capture happens BEFORE any filtering so the archive includes posts that later get rejected by comment/post validation gates.
+
+### Backend
+- **New prompt** `prompts/promotional_detection.txt`: returns `[{post_id, is_promotional, promo_type, reasoning}]` with `promo_type` ∈ `launch | built-something | self-promo | subtle-mention | none`. Generous detection bias — better to over-flag than miss subtle plugs.
+- **New LLM helper** `llm_client.detect_promotional_posts_batch(posts)`: one batched call, mapped back by `post_id` (drops hallucinated/missing ids per the existing `id_to_index` pattern). Body excerpt capped at 800 chars per post — promo signals usually surface in opening lines.
+- **New workflow Step 2.5** in `workflow.py`: runs right after dedup (Step 2) and BEFORE the score filter pass-through (Step 3). Persists `is_promotional=true` rows to the new `promotional_posts` SQLite table with `validation_tag=NULL`. After Steps 6 + 9 finish, `_backfill_promo_validation_tags()` upgrades each row's `validation_tag` to the BEST available verdict (PASS > UNSURE > FAIL) drawn from `comment_validations` + `post_validations`.
+- **New SQLite table** `promotional_posts` (PK `post_id`; one row per canonical post; `subreddit_sources` stored as JSON to keep cross-post info in one row). Indexes on upvotes / num_comments / created_utc / validation_tag / promo_type for the dashboard sort+filter combinations. **Permanent** — cleanup loop never touches it (mirrors Memory Bank invariant).
+- **New storage helpers**: `save_promotional_posts(rows)` (idempotent on `post_id`, UPSERTs metadata so re-runs refresh upvote counts), `update_promotional_validation(post_id, tag)`, `list_promotional_posts(...)` paginated/sorted/filtered.
+- **New API endpoint** `GET /promotional?page&page_size&sort_by&order&filter&promo_type&q` — drives the dashboard. `filter`: `all|pass|unsure|fail|unrated`. `promo_type`: `all|launch|built-something|self-promo|subtle-mention`.
+- **Existing `/results` endpoint** now also returns `promotional_detections: [...]` so the main page can render the chip on every card.
+
+### Frontend
+- **New `<PromoChip>` component** in `page.tsx`: small purple chip rendered inside a new `.tag-group` container next to PASS/UNSURE/FAIL on Selected, Suggestions, AND Rejected cards. Tooltip surfaces the LLM's reasoning. Color-coded by `promo_type` on the dashboard but a single purple chip on the run results (where it just signals "promotional, click through to /promo for details").
+- **New header button** `🚀 Promotional / Launch Bank` next to `📚 Subreddit Memory Bank`.
+- **New route** `/promo/page.tsx` (mirrors `/memory` structure): paginated list, sort by upvotes/comments/date/detected, separate filter rows for validation_tag and promo_type, title text-search, expandable card showing first 3 lines of the body excerpt + all subreddit sources (with member counts) + LLM reasoning. Auth flow reuses sessionStorage password from main page.
+- **CSS additions** in `globals.css`: `.tag-group`, `.promo-chip` (violet pill), and `/promo` dashboard styles incl. four color-coded `.promo-type-*` badges.
+
+### Why SQLite (not Mongo)
+Same shape as Memory Bank — bounded growth, single-writer, JSON columns for nested data, simple indexed queries. Mongo would only matter for sharding / cross-region replication, neither of which apply.
+
+### Cost impact
++1 batched LLM call per workflow run (~5–10K tokens for typical 35-post batch). Step 2.5 is non-fatal — failures are logged to `error_log` and the workflow continues without promo detection.
+
+---
+
 ## 2026-04-24 - Removed score filter; UI partitions low-score posts into collapsed sub-section
 
 ### Reason

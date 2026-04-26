@@ -14,7 +14,7 @@ Fetches Reddit posts via Apify API, evaluates them with Claude Opus 4.7 (Bedrock
 - `config.example.json` - Public template for user/product context and defaults (committed)
 - `config.json` - User's real config; gitignored, copied from `config.example.json` on first setup
 - `requirements.txt` - Python dependencies (no openai SDK)
-- `/prompts/` - 6 prompt template files (4 are batched: comment_validation, post_scoring, post_rewrite, post_validation)
+- `/prompts/` - 7 prompt template files (5 batched: promotional_detection, comment_validation, post_scoring, post_rewrite, post_validation)
 - `/data/tasks.db` - SQLite store, gitignored
 - `/logs/api_calls.log` - Auto-generated log of all API calls
 </file_map>
@@ -27,10 +27,11 @@ Fetches Reddit posts via Apify API, evaluates them with Claude Opus 4.7 (Bedrock
 - `GET /health` - Health check (unprotected)
 - `POST /run` - Start workflow, returns task_id (protected)
 - `GET /status/{task_id}` - Poll for progress (protected)
-- `GET /results/{task_id}` - Get full results incl. `llm_calls` (protected)
+- `GET /results/{task_id}` - Get full results incl. `llm_calls` and `promotional_detections` (protected)
 - `GET /history` - List runs from last RETENTION_DAYS (protected)
 - `GET /memory/subreddits` - Memory Bank: paginated subreddit list (protected)
 - `GET /memory/subreddits/{name}/posts` - Memory Bank: paginated posts in a subreddit, with sort/filter/title-search (protected)
+- `GET /promotional` - Promotional/Launch Bank: paginated promo-tagged posts with sort + tag/promo_type filters + title search (protected)
 
 ### Auth
 - Protected routes require `X-Access-Password` header matching `ACCESS_PASSWORD` env var
@@ -45,17 +46,18 @@ Fetches Reddit posts via Apify API, evaluates them with Claude Opus 4.7 (Bedrock
 ### Workflow Steps (workflow.py)
 1. Parse inputs (URLs or keywords)
 2. Fetch from Reddit via Apify (10 posts per source, parallel across sources)
-3. Filter posts (score > min_score)
+2.5. **Promotional / Launch detection** — 1 batched LLM call. Tags posts where the author is launching / built something / self-promoting / subtly mentioning. Persists `is_promotional=true` rows to permanent `promotional_posts` table with `validation_tag=NULL`.
+3. Pass-through (score filter removed; UI demotes low-score posts visually instead)
 4. Batch evaluate for comments (YES/NO) - 1 LLM call
 5. Generate 2 comments per YES post - N parallel LLM calls (Semaphore=5)
 6. Batch validate all comments - 1 LLM call
 7. Batch score posts for Reddit/LinkedIn repurposing (virality + fit, SELECT/IGNORE) - 1 LLM call
 8. Batch generate rewrite strategies (SELECT posts only) - 1 LLM call
 9. Batch validate post strategies - 1 LLM call
-10. Store results
+10. Store results + Memory Bank archive + back-fill `promotional_posts.validation_tag` (PASS > UNSURE > FAIL across both validation gates)
 11. Mark complete
 
-For 10/5/4 typical run: 1 + 5 + 1 + 1 + 1 + 1 = **10 LLM calls** (was 25 before batching).
+For 10/5/4 typical run: 1 (Step 2.5) + 1 + 5 + 1 + 1 + 1 + 1 = **11 LLM calls**.
 
 ### Storage Pattern
 - TaskData dataclass holds all per-run data (incl. `llm_calls` powering the Prompt Debugger)
@@ -64,6 +66,8 @@ For 10/5/4 typical run: 1 + 5 + 1 + 1 + 1 + 1 = **10 LLM calls** (was 25 before 
 - On startup, load all non-expired tasks into cache
 - Background cleanup every 30 min, retention from `config.json:retention_days` (default 7)
 - **Memory Bank tables are PERMANENT** — `memory_posts` (PK `post_id`, idempotent inserts) and `memory_subreddits` (denormalized rollup). Cleanup loop never touches them. Populated by `workflow._collect_memory_bank` after step 9.
+- **Promotional bank also PERMANENT** — `promotional_posts` (PK `post_id`; one row per canonical post; `subreddit_sources` JSON-encoded). Written by Step 2.5 with `validation_tag=NULL`, then back-filled by `_backfill_promo_validation_tags` once both validation gates run. Cleanup loop never touches it.
+- **`source_input_type` (TEXT)** column on BOTH `memory_posts` and `promotional_posts`. Tags each row with the run's discovery mode (`urls` or `keywords`). First-seen wins on conflict — preserved by INSERT OR IGNORE on memory_posts and explicitly omitted from `DO UPDATE SET` on the promo UPSERT. Powers the "unbiased" (keyword-only) counts on the dashboards. Older rows whose source task aged out stay NULL → counted in `total` but NOT `unbiased`. `_backfill_source_input_type` runs once on startup against the still-cached tasks.
 
 ### Config Placeholders
 Prompts consume two config-injected placeholders:

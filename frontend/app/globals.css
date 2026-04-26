@@ -92,6 +92,11 @@ textarea:focus {
   display: inline-block;
 }
 .memory-bank-button:hover { background: #4338ca; }
+
+/* Promo bank uses a distinct color (amber/orange) so the user immediately sees these are
+ * two separate archives. Same shape/size as memory-bank-button to keep header rhythm. */
+.promo-bank-button { background: #d97706; }   /* amber-600 */
+.promo-bank-button:hover { background: #b45309; }  /* amber-700 */
 .history-select {
   padding: 8px 12px;
   border: 1px solid #ddd;
@@ -159,15 +164,38 @@ body { padding-bottom: 40px; }
   box-shadow: 0 1px 3px rgba(0,0,0,.06); overflow: hidden;
 }
 .sub-row {
-  width: 100%; padding: 14px 16px; border: none; background: white;
+  width: 100%; padding: 14px 16px; background: white;
   display: flex; align-items: center; gap: 12px; cursor: pointer; text-align: left;
-  color: #1f2937;  /* override the global `button { color: white }` rule above — without this the subreddit name renders invisible on white bg */
+  /* Left border + subtle background gradient act as the primary "this is clickable" cue
+     (a single right-side chevron was too easy to miss). Hover deepens both. */
+  border: 1px solid #e5e7eb;
+  border-left: 4px solid #818cf8;   /* indigo accent bar — the main affordance */
+  border-radius: 6px;
+  color: #1f2937;
+  transition: background .12s, border-left-color .12s, transform .08s;
 }
-.sub-row:hover { background: #f9fafb; }
-.sub-name { font-weight: 600; font-size: 15px; flex: 1; }
+.sub-row:hover {
+  background: #eef2ff;             /* indigo-50 — clearly highlights the row on hover */
+  border-left-color: #4f46e5;      /* indigo-600 — accent bar deepens */
+  transform: translateX(1px);
+}
+.sub-row:focus-visible { outline: 2px solid #4f46e5; outline-offset: -2px; }
+.sub-name { font-weight: 600; font-size: 15px; flex: 1; color: #4f46e5; }
+.sub-row:hover .sub-name { color: #4338ca; text-decoration: underline; }
 .sub-subscribers { font-weight: 400; font-size: 12px; color: #94a3b8; }
 .sub-meta { font-size: 13px; color: #6b7280; }
-.chev { font-size: 18px; color: #9ca3af; transition: transform .15s; display: inline-block; }
+/* "Click to expand" hint — appears next to the chevron, dims when row is open */
+.sub-hint {
+  font-size: 11px; color: #818cf8; font-style: italic; margin-right: 4px;
+  white-space: nowrap;
+}
+.sub-row:hover .sub-hint { color: #4f46e5; }
+.chev {
+  font-size: 22px; color: #6366f1; transition: transform .15s;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 50%; background: #eef2ff;
+}
+.sub-row:hover .chev { background: #e0e7ff; color: #4338ca; }
 .chev.open { transform: rotate(90deg); }
 
 .posts-panel { padding: 0 16px 16px; border-top: 1px solid #f3f4f6; }
@@ -211,6 +239,190 @@ body { padding-bottom: 40px; }
   border-radius: 6px; cursor: pointer; font-size: 13px; color: #1f2937;
 }
 .memory-pager button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Title row: H1 on the left, top pager on the right. Used by both bank dashboards
+ * so the user can paginate without scrolling to the bottom. */
+.page-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin: 8px 0 16px;
+  flex-wrap: wrap;
+}
+.page-header-row h1 { margin: 0; }
+/* Compact variant of .memory-pager so it fits in the title row */
+.memory-pager.memory-pager-top {
+  margin: 0;
+  font-size: 12px;
+  gap: 10px;
+}
+.memory-pager.memory-pager-top button { padding: 4px 10px; font-size: 12px; }
+
+/* ----- Results-area example placeholder (shown before any workflow runs) ----- */
+.results-example-wrap { opacity: 0.92; }
+.results-example-header {
+  display: flex; align-items: center; gap: 12px; margin: 24px 0 12px;
+  flex-wrap: wrap;
+}
+.results-example-badge {
+  background: #e0e7ff; color: #3730a3;
+  padding: 4px 10px; border-radius: 6px; font-size: 11px;
+  font-weight: 700; letter-spacing: 0.5px;
+}
+.results-example-hint { font-size: 12px; color: #6b7280; font-style: italic; }
+/* Dashed border + slight tint so example cards never get mistaken for real results */
+.example-card {
+  border: 2px dashed #c7d2fe !important;
+  background: #fafaff !important;
+}
+/* Inline italic hint after example link text */
+.example-inline { font-style: italic; color: #6b7280; font-weight: 400; font-size: 12px; }
+/* Indigo-tinted callout pointing UP to the element above it */
+.example-callout {
+  font-size: 11px; color: #4f46e5; font-style: italic;
+  margin: 4px 0 10px; padding-left: 8px; border-left: 2px solid #c7d2fe;
+}
+/* Single-block explanatory note inside Rejected Posts example */
+.example-callout-block {
+  font-size: 12px; color: #4338ca; padding: 12px;
+  background: #eef2ff; border-radius: 6px; border: 1px dashed #c7d2fe;
+  line-height: 1.5;
+}
+/* Small label at the top of each example card stating which tier (high vs low) it represents */
+.example-tier-badge {
+  display: inline-block;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.4px;
+  padding: 3px 8px; border-radius: 4px;
+  background: #c7d2fe; color: #3730a3;
+  margin-bottom: 8px;
+}
+.example-tier-badge.low { background: #cbd5e1; color: #475569; }
+/* Disabled example buttons keep visual cues but don't accept clicks */
+.example-card button:disabled, .results-example-wrap .filter-tab:disabled,
+.results-example-wrap .low-score-counts-jump:disabled {
+  cursor: default; opacity: 0.85;
+}
+
+/* ----- Post-run results-tour toast (offers walkthrough; user opts in) ----- */
+.results-toast {
+  position: fixed; bottom: 24px; right: 24px; z-index: 9997;
+  background: white; border: 1px solid #c7d2fe; border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  padding: 14px 16px; max-width: 360px;
+  display: flex; flex-direction: column; gap: 10px;
+  animation: results-toast-in 0.25s ease-out;
+}
+@keyframes results-toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.results-toast-msg { font-size: 13px; color: #1f2937; line-height: 1.4; }
+.results-toast-controls { display: flex; gap: 8px; justify-content: flex-end; }
+.results-toast-controls button {
+  padding: 6px 12px; border: 1px solid #d1d5db; background: white;
+  border-radius: 6px; font-size: 12px; cursor: pointer; color: #374151;
+}
+.results-toast-controls button:hover { background: #f9fafb; }
+.results-toast-controls .results-toast-yes {
+  background: #4f46e5; color: white; border-color: #4f46e5; font-weight: 600;
+}
+.results-toast-controls .results-toast-yes:hover { background: #4338ca; border-color: #4338ca; }
+
+/* ----- Guided tour overlay (fires after every login; per-page steps) ----- */
+/* Spotlight = a transparent box around the highlighted target with a HUGE box-shadow that
+ * acts as the dimming overlay. Clicking the dim region dismisses the tour. */
+.tour-spotlight {
+  position: absolute;
+  border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.55);   /* slate-900 @ 55% */
+  border: 2px solid #6366f1;                          /* indigo-500 ring on the highlighted element */
+  pointer-events: auto;
+  z-index: 9998;
+  cursor: pointer;
+  animation: tour-pulse 1.6s ease-in-out infinite;
+}
+@keyframes tour-pulse {
+  0%, 100% { box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.55), 0 0 0 0 rgba(99, 102, 241, 0.45); }
+  50%      { box-shadow: 0 0 0 9999px rgba(15, 23, 42, 0.55), 0 0 0 6px rgba(99, 102, 241, 0); }
+}
+
+/* Popup card with step content. Width fixed via inline style so positioning math is stable. */
+.tour-popup {
+  position: absolute;
+  z-index: 9999;
+  background: white;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+  padding: 16px 18px;
+  border: 1px solid #e5e7eb;
+}
+.tour-popup-above { transform: translateY(-100%); }
+.tour-popup-step {
+  font-size: 11px; color: #6366f1; font-weight: 600;
+  letter-spacing: 0.5px; text-transform: uppercase; margin-bottom: 6px;
+}
+.tour-popup-title { font-size: 15px; font-weight: 700; color: #1f2937; margin-bottom: 8px; }
+.tour-popup-body  { font-size: 13px; color: #374151; line-height: 1.5; margin-bottom: 14px; }
+.tour-popup-controls { display: flex; align-items: center; gap: 8px; }
+.tour-popup-controls button {
+  padding: 6px 12px; border: 1px solid #d1d5db; background: white;
+  border-radius: 6px; font-size: 12px; cursor: pointer; color: #374151;
+}
+.tour-popup-controls button:hover { background: #f9fafb; }
+.tour-popup-controls .tour-next {
+  background: #4f46e5; color: white; border-color: #4f46e5; font-weight: 600;
+}
+.tour-popup-controls .tour-next:hover { background: #4338ca; border-color: #4338ca; }
+.tour-popup-controls .tour-skip { color: #6b7280; }
+
+/* ----- /promo dashboard styles (Promotional / Launch Bank) ----- */
+.promo-intro { font-size: 13px; color: #6b7280; margin: 0 0 16px; }
+.promo-post { background: #fafafa; }
+/* First few lines of the post body — preserves whitespace from Reddit so the original formatting reads through */
+.promo-body-excerpt {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #374151;
+  white-space: pre-wrap;
+  line-height: 1.5;
+  font-family: inherit;
+}
+/* Color-coded promo type badges so the four categories are visually distinct */
+.promo-type-badge {
+  display: inline-block; padding: 2px 8px; border-radius: 10px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px;
+}
+.promo-type-launch          { background: #fef3c7; color: #92400e; }   /* amber */
+.promo-type-built-something { background: #d1fae5; color: #065f46; }   /* emerald */
+.promo-type-self-promo      { background: #fee2e2; color: #991b1b; }   /* red */
+.promo-type-subtle-mention  { background: #ede9fe; color: #5b21b6; }   /* violet */
+
+/* Subreddit dropdown on the /promo dashboard. Sized to fit the toolbar row;
+ * options come pre-sorted from the backend by promo-post count DESC. */
+.promo-sub-select {
+  padding: 4px 8px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #1f2937;
+  background: white;
+  min-width: 220px;
+  max-width: 280px;
+}
+
+/* Promo type filter buttons — smaller than default .posts-filter so the row of 5 fits
+ * after the subreddit dropdown without wrapping. Display labels shortened in the JSX. */
+.posts-filter.promo-type-btn {
+  padding: 2px 5px;
+  font-size: 9px;
+  letter-spacing: 0.1px;
+  min-width: 0;
+}
 
 /* Input header: radio buttons on the left, mode-specific dropdowns on the right (same row) */
 .input-header {
@@ -297,6 +509,42 @@ button:disabled {
     transform: rotate(360deg);
   }
 }
+
+/* Wraps the filter-tab strip on the LEFT and the LowScoreJump count badge on the RIGHT
+ * so the user sees the low-score group exists without having to scroll the section. */
+.filter-tabs-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.filter-tabs-row .filter-tabs { margin-bottom: 0; }
+
+/* Counts + jump-link rendered to the right of the filter tabs (Section 1 + Section 2).
+ * High count is visual context only; low count is a clickable scroll-to-anchor. */
+.low-score-counts {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #6b7280;
+  white-space: nowrap;
+}
+.low-score-counts-high { color: #16a34a; font-weight: 500; }   /* green-600 — high signal */
+.low-score-counts-sep { color: #d1d5db; }
+.low-score-counts-jump {
+  background: #f1f5f9;            /* slate-100 — matches low-score card bg */
+  border: 1px solid #cbd5e1;      /* slate-300 */
+  color: #64748b;                 /* slate-500 — muted, secondary to high count */
+  padding: 3px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.low-score-counts-jump:hover { background: #e2e8f0; color: #475569; }
 
 /* Filter tabs */
 .filter-tabs {
@@ -462,6 +710,30 @@ button:disabled {
 .tag.error {
   background: #e0e0e0;
   color: #666;
+}
+
+/* Wraps PASS/UNSURE/FAIL tag + (optional) Promotional/Launch chip so they sit side-by-side */
+.tag-group {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* Promotional/Launch chip — purple to clearly separate from PASS/UNSURE/FAIL.
+ * Smaller than the validation tag so it reads as secondary; subcategory is preserved
+ * on the /promo dashboard, not surfaced here. Tooltip (title attr) shows LLM reasoning. */
+.promo-chip {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  background: #ede9fe;   /* violet-100 */
+  color: #6d28d9;        /* violet-700 */
+  border: 1px solid #c4b5fd; /* violet-300 — subtle outline so it reads as a separate chip */
+  cursor: help;
 }
 
 /* Comment box */

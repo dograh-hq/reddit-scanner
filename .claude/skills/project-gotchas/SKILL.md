@@ -41,3 +41,29 @@ description: Recurring failure points in this Reddit/LinkedIn discovery repo. Re
 - Graceful degradation: continue on per-item failure, log it
 - PRODUCT_CONTEXT lives in 3 prompts, 3 methods
 - Prompts must stay generic — no hardcoded product names
+- Promotional bank table is permanent — never cleaned
+- Step 2.5 runs BEFORE filtering — captures all
+- promotional_posts PK is post_id alone (not composite)
+- subreddit_sources stored as JSON in promo table
+- promo validation_tag back-filled after Steps 6+9
+- PASS > UNSURE > FAIL precedence on promo back-fill
+- Promo detection is non-fatal — workflow continues on error
+- /promo dashboard reuses sessionStorage password from main
+- Promo subreddit filter uses json_each EXISTS clause
+- Promo subreddit aggregate is sorted DESC by count
+- Keywords is the default radio mode on main page
+- SQLite UPSERT rowcount=1 for both INSERT and UPDATE
+- Probe SELECT before UPSERT to count true inserts
+- Tour storageKey flags cleared on login + logout
+- /promo dropdown counts are cross-post-aware via json_each
+- Bank PAGE_SIZE is 20 (not 25)
+- New tour flags MUST use tour_ prefix for resetTourFlags
+- ResultsExample shown only when !results && !status
+- Auto-verify on mount must NOT call resetTourFlags
+- Post-run toast fires once per login (sessionStorage)
+- Bank rows tagged source_input_type at insert; first-seen wins
+- Memory Bank default sort is keyword_finds (unbiased)
+- Promo aggregate returns {keyword_count, total_count} pair
+- promotional_posts UPSERT must NOT overwrite source_input_type
+- Backfill walks _tasks cache after _load_all on startup
+- "Unbiased" = posts found via keyword fetch only
