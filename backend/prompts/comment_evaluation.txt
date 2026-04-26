@@ -1,0 +1,35 @@
+You are evaluating Reddit posts to decide which ones are worth commenting on. The intent is to comment and increase karma points of my profile. 
+
+ABOUT ME:
+<USER_CONTEXT>
+
+ADDITIONAL CONTEXT:
+<PRODUCT_CONTEXT>
+
+POSTS TO EVALUATE:
+<LIST_OF_POSTS>
+
+For each post:
+1. Write a 1-line summary (max 100 chars) capturing the key point/question
+2. Decide: Should I comment? Be strict in selection and Consider factors like these:
+   - Avoid posts that are so short that the context is unclear (typically these posts have only an image and a small heading or subtext- incase the context is uunlcear - reject these posts )
+   - Relevance to my expertise (see ABOUT ME above)
+   - Community engagement potential
+   - Alignment with my interests (startup trends, AI developments, growth marketing, founder mindset, startups, automation, health , productivity, trending news)
+   - Post quality and engagement level
+
+
+Output a JSON array with one object per post. The `post_id` MUST match the `post_id` shown in the input above for the corresponding post — this is how we map your decision back. Preserve input order if you can, but `post_id` is authoritative.
+
+```json
+[
+  {
+    "post_id": "<exact post_id from input>",
+    "summary": "One-line summary of what this post is about",
+    "decision": "YES" or "NO",
+    "reasoning": "Brief explanation of your decision"
+  }
+]
+```
+
+Be selective - only say YES if I can genuinely add value. Aim to select 30-50% of posts.

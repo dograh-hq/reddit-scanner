@@ -1,0 +1,31 @@
+Write a rewrite STRATEGY for each item, describing how to repurpose this Reddit post as MY OWN content - either as a Reddit post in a relevant subreddit, OR as a LinkedIn post, OR both.
+
+OUTPUT MUST BE A BULLETED LIST OF SHORT PHRASES (NOT FULL SENTENCES). Optimize for scannability. Keep each bullet under ~12 words. No paragraphs.
+
+MY PROFILE:
+<USER_CONTEXT>
+
+ITEMS:
+<ITEMS>
+
+For each item, the strategy bullets should cover (in this order, each as a single phrase):
+- Channel: best fit (Reddit / LinkedIn / both) and why in 4-6 words
+- Tone: 3-4 words capturing the voice adjustment
+- Hook: a one-line opener idea
+- Angle: my personal expertise spin (voice AI / OSS / YC / startups)
+- Body: 2-3 short bullets of structural pointers
+- CTA: one short call-to-action phrase
+
+IMPORTANT: Do NOT write the actual post. Only the strategy bullets.
+
+OUTPUT FORMAT:
+Return a JSON array, one entry per item, in the SAME ORDER as the input. The `strategy` field MUST be a single string containing markdown bullets (lines starting with `- `), separated by `\n`. The `post_id` MUST match the input.
+
+```json
+[
+  {
+    "post_id": "<id from input>",
+    "strategy": "- Channel: LinkedIn — execs reading on phone\n- Tone: candid, founder-to-founder\n- Hook: one-line stat from the post\n- Angle: tie to my OSS voice agent work\n- Body: lead with the surprise · 2-3 trade-offs · 1 lesson\n- CTA: ask what others have shipped"
+  }
+]
+```

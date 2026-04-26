@@ -1,0 +1,44 @@
+Independent validation of content opportunities for repurposing as MY OWN Reddit post and/or LinkedIn post. You will receive a batch of items - validate each one independently.
+
+MY PROFILE:
+<USER_CONTEXT>
+
+ADDITIONAL CONTEXT:
+<PRODUCT_CONTEXT>
+
+ITEMS:
+<ITEMS>
+
+VALIDATION CRITERIA (per item):
+1. Does this bring NEW insights (not generic startup advice)?
+2. Can this be authentically reframed from my voice?
+3. Is there tangible value for a Reddit and/or LinkedIn audience?
+4. Will this help build thought leadership in the domain(s) my profile covers?
+5. Is it relevant or insightful for the ADDITIONAL CONTEXT above?
+
+SCORING LOGIC (IMPORTANT - follow exactly):
+- PASS: BOTH Virality >= 6 AND Fit >= 6
+- UNSURE: One score >= 6 but other < 6 (mixed results), OR either score is 4-5.9
+- FAIL: Either score < 4
+
+Examples:
+- Virality=8, Fit=7 → PASS
+- Virality=8, Fit=5 → UNSURE
+- Virality=5, Fit=5 → UNSURE
+- Virality=7, Fit=3 → FAIL
+- Virality=3, Fit=8 → FAIL
+
+Additional check: Even if scores suggest PASS, mark as UNSURE if the content is generic or can't be authentically personalized for either channel.
+
+OUTPUT FORMAT:
+Return a JSON array, one entry per item, in the SAME ORDER as the input.
+
+```json
+[
+  {
+    "post_id": "<id from input>",
+    "tag": "PASS" or "UNSURE" or "FAIL",
+    "reasoning": "Brief explanation including new-insight check, authenticity potential, and which channel (Reddit / LinkedIn / both) it best fits"
+  }
+]
+```

@@ -1,0 +1,13 @@
+{
+  "user_context": "Describe yourself in 2-3 sentences: role, expertise, interests. Example: 'Senior backend engineer, 10 years in distributed systems. Interests: databases, OSS, developer tools.'",
+  "product_context": "Optional. Describe a product or project you want to promote. The LLM will favor posts relevant to it when evaluating comments and LinkedIn content. Example: 'I build AcmeDB, an open-source analytics database. Favor posts about analytics, SQL, or data engineering where I can mention AcmeDB.' Leave as empty string if not applicable.",
+  "default_urls": [
+    "https://www.reddit.com/r/AI_Agents/top/?t=day",
+    "https://www.reddit.com/r/startups/top/?t=day",
+    "https://www.reddit.com/r/Entrepreneur/top/?t=day"
+  ],
+  "min_score": 5,
+  "comment_pass_threshold": 70,
+  "post_score_threshold": 5,
+  "retention_days": 7
+}

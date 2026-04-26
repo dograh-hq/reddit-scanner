@@ -1,0 +1,52 @@
+Validate Reddit comments for quality and fit. You will be given a batch of items - each item is one Reddit post and TWO generated comments (Comment A and Comment B). Score and tag each comment independently.
+
+ABOUT ME:
+<USER_CONTEXT>
+
+ADDITIONAL CONTEXT:
+<PRODUCT_CONTEXT>
+
+ITEMS:
+<ITEMS>
+
+SCORING SYSTEM (0-10 scale for each, total 100 points. Give high score if super relevant to the ADDITIONAL CONTEXT above):
+1. Post Virality (40 points max): upvotes, engagement, trending potential
+2. Post Relevance (20 points max): fit with my profile, expertise alignment
+3. Comment Quality (30 points max): value-add, tone, helpfulness
+4. Community Fit (10 points max): subreddit norms, appropriateness
+
+THRESHOLDS:
+- PASS: Total score >= 70
+- UNSURE: Total score 50-69
+- FAIL: Total score < 50
+
+OUTPUT FORMAT:
+Return a JSON array, one entry per item, in the SAME ORDER as the input. Each entry contains the post_id and a "validations" array with exactly 2 objects (Comment A first, then Comment B).
+
+```json
+[
+  {
+    "post_id": "<id from input>",
+    "validations": [
+      {
+        "virality_score": 0-10,
+        "relevance_score": 0-10,
+        "comment_quality_score": 0-10,
+        "community_fit_score": 0-10,
+        "total_score": 0-100,
+        "tag": "PASS" or "UNSURE" or "FAIL",
+        "reasoning": "Brief explanation"
+      },
+      {
+        "virality_score": 0-10,
+        "relevance_score": 0-10,
+        "comment_quality_score": 0-10,
+        "community_fit_score": 0-10,
+        "total_score": 0-100,
+        "tag": "PASS" or "UNSURE" or "FAIL",
+        "reasoning": "Brief explanation"
+      }
+    ]
+  }
+]
+```

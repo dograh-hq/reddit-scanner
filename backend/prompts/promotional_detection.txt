@@ -1,0 +1,29 @@
+You are auditing Reddit posts to spot ones where the author is promoting their own product, launching something, or subtly mentioning something they built. The goal is to harvest these posts as STYLE REFERENCES — examples of how founders and builders frame their own promotion on Reddit (where outright self-promo is frowned upon, so the best examples are subtle).
+
+POSTS TO AUDIT:
+<LIST_OF_POSTS>
+
+For each post, decide whether the author is doing one of:
+- `launch`: outright "I just launched X" / "Today I'm releasing Y" / Show-HN-style announcement
+- `built-something`: "I built X to solve Y" / "I made a tool that does Z" — sharing something they shipped (commercial OR open source)
+- `self-promo`: directly pitching their own product / service / company / SaaS / agency / newsletter / course
+- `subtle-mention`: post is mostly a story, lesson, ask-for-feedback, or "how I did X" — but along the way they name-drop, link, or describe something they personally built / run / sell
+- `none`: post is NOT promoting anything the author built or runs (asking for help, sharing news, discussing trends, etc.)
+
+Be GENEROUS in detection. If a post mentions "my SaaS", "my tool", "I'm building", "my agency", "we just shipped", "my product", "my startup", "I've created", a personal-project URL, or a soft plug — flag it. Only return `none` when the post is clearly third-party discussion, news, a question for help, or commentary on someone else's work.
+
+OUTPUT FORMAT:
+The `post_id` MUST match the input `post_id` exactly — that is how we map your decision back. Preserve input order if you can, but `post_id` is authoritative.
+
+```json
+[
+  {
+    "post_id": "<exact post_id from input>",
+    "is_promotional": true | false,
+    "promo_type": "launch" | "built-something" | "self-promo" | "subtle-mention" | "none",
+    "reasoning": "1-2 sentences: what specifically signals promotion (or why nothing)"
+  }
+]
+```
+
+Set `is_promotional = false` ONLY when `promo_type = "none"`. Otherwise `is_promotional = true`.

@@ -1,0 +1,51 @@
+# Environment variables (contain API keys)
+.env
+.env.local
+.env.*.local
+.env.production
+.env.development
+
+# User-specific config (ships as config.example.json)
+backend/config.json
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Node.js / Next.js
+node_modules/
+.next/
+dist/
+build/
+.turbo/
+
+# Logs
+logs/
+*.log
+
+# SQLite task storage
+backend/data/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test / Coverage
+.coverage
+htmlcov/
+.pytest_cache/
+
+# Claude Code local settings
+.claude/settings.local.json

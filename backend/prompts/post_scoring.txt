@@ -1,0 +1,47 @@
+Score these Reddit posts for repurposing potential as my own content - either as a Reddit post (in a relevant subreddit I run/participate in) OR as a LinkedIn post. Treat the two channels together: a high-fit post should work well on at least one of them.
+
+MY PROFILE:
+<USER_CONTEXT>
+
+ADDITIONAL CONTEXT:
+<PRODUCT_CONTEXT>
+
+POSTS TO SCORE:
+<LIST_OF_POSTS>
+
+For each post, calculate two scores:
+
+VIRALITY SCORE (1-10):
+- High weightage on upvotes (primary signal)
+- Comments count and engagement
+- Trending velocity
+- Insight novelty
+- Value density
+
+FIT SCORE (1-10) - fit for repurposing as MY OWN Reddit post and/or LinkedIn post:
+- Alignment with my profile (YC alumni, voice AI, OSS, startups)
+- Reddit community norms AND LinkedIn platform norms (the post should be reframable for at least one)
+- Authenticity potential (can I tell this from my perspective?)
+- Personalization feasibility
+- Alignment with my interests (startup trends, AI developments, growth marketing, founder mindset, startups, automation, health, productivity, trending news)
+
+KEY PRINCIPLE: Both Reddit and LinkedIn reward NEW INSIGHTS and GENUINE VALUE, not generic advice.
+
+DECISION CRITERIA:
+- SELECT: BOTH virality >= 6 AND fit >= 6 (worth repurposing). Mirrors the PASS gate in post_validation.
+- IGNORE: Either score < 6 (not worth the effort to repurpose)
+
+OUTPUT FORMAT:
+The `post_id` MUST match the `post_id` shown in the input for the corresponding post — this is how we map your scores back. Preserve input order if you can, but `post_id` is authoritative.
+
+```json
+[
+  {
+    "post_id": "<exact post_id from input>",
+    "virality_score": 1-10,
+    "fit_score": 1-10,
+    "decision": "SELECT" or "IGNORE",
+    "reasoning": "Brief explanation of scores and decision, mentioning whether it leans Reddit, LinkedIn, or both"
+  }
+]
+```

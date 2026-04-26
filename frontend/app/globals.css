@@ -1,0 +1,642 @@
+/* Global styles for the Reddit & LinkedIn Discovery app */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #f5f5f5;
+  color: #333;
+  line-height: 1.6;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+h1 {
+  font-size: 24px;
+  margin-bottom: 20px;
+  color: #1a1a1a;
+}
+
+h2 {
+  font-size: 18px;
+  margin-bottom: 12px;
+  color: #333;
+}
+
+/* Input section */
+.input-section {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.radio-group {
+  display: flex;
+  gap: 20px;
+  margin-bottom: 15px;
+}
+.input-header .radio-group {
+  margin-bottom: 0;
+}
+
+.radio-group label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  resize: vertical;
+  margin-bottom: 15px;
+}
+
+textarea:focus {
+  outline: none;
+  border-color: #0066cc;
+}
+
+/* Header actions row: Memory Bank button (left), History dropdown (right). Below logout. */
+.header-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 15px;
+}
+.memory-bank-button {
+  background: #4f46e5;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  display: inline-block;
+}
+.memory-bank-button:hover { background: #4338ca; }
+.history-select {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  background: white;
+}
+
+/* Bottom Prompt Debugger panel — collapsed = thin colored bar, expanded = scrollable list */
+.prompt-debugger {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 50;
+  background: #1f2937; color: #e5e7eb; border-top: 3px solid #6b46c1;
+  box-shadow: 0 -2px 12px rgba(0,0,0,.2);
+  max-height: 70vh; display: flex; flex-direction: column;
+}
+.prompt-debugger.collapsed { max-height: 36px; }
+.prompt-debugger-bar {
+  height: 36px; padding: 0 16px;
+  display: flex; justify-content: space-between; align-items: center;
+  cursor: pointer; font-size: 13px; font-weight: 600; user-select: none;
+}
+.prompt-debugger-body { overflow-y: auto; padding: 12px 16px 20px; }
+.pd-step { border: 1px solid #374151; border-radius: 6px; margin-bottom: 8px; }
+.pd-step-header, .pd-group-header, .pd-leaf-header {
+  cursor: pointer; padding: 8px 12px;
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 13px;
+}
+.pd-step-header { background: #374151; border-radius: 6px 6px 0 0; }
+.pd-group { margin: 6px 12px; border-left: 2px solid #4b5563; }
+.pd-group-header { background: #2d3748; }
+.pd-leaf { margin: 4px 0; border-left: 2px solid #6b7280; }
+.pd-leaf-header:hover { background: #374151; }
+.pd-prompt, .pd-response {
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px; background: #111827; padding: 12px; border-radius: 4px;
+  margin: 8px; max-height: 400px; overflow-y: auto;
+  color: #d1d5db;
+}
+/* Leave room at the page bottom so the collapsed debugger bar doesn't cover content */
+body { padding-bottom: 40px; }
+
+/* ---------- Subreddit Memory Bank dashboard (/memory) ---------- */
+.memory-container { max-width: 1100px; margin: 0 auto; padding: 24px; }
+.memory-container h1 { margin: 8px 0 16px; }
+.back-link { display: inline-block; margin-bottom: 12px; color: #4f46e5; text-decoration: none; font-size: 14px; }
+.back-link:hover { text-decoration: underline; }
+.memory-toolbar {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 16px; gap: 12px;
+}
+.memory-toolbar button {
+  padding: 6px 12px; font-size: 13px; background: white; color: #1f2937;
+  border: 1px solid #d1d5db; border-radius: 6px; cursor: pointer;
+}
+.memory-toolbar button:hover { background: #f3f4f6; }
+.memory-toolbar-meta { font-size: 13px; color: #6b7280; }
+.memory-empty {
+  padding: 24px; text-align: center; color: #6b7280; font-size: 14px;
+  background: white; border-radius: 8px; margin: 16px 0;
+}
+.sub-accordion {
+  background: white; border-radius: 8px; margin-bottom: 8px;
+  box-shadow: 0 1px 3px rgba(0,0,0,.06); overflow: hidden;
+}
+.sub-row {
+  width: 100%; padding: 14px 16px; border: none; background: white;
+  display: flex; align-items: center; gap: 12px; cursor: pointer; text-align: left;
+  color: #1f2937;  /* override the global `button { color: white }` rule above — without this the subreddit name renders invisible on white bg */
+}
+.sub-row:hover { background: #f9fafb; }
+.sub-name { font-weight: 600; font-size: 15px; flex: 1; }
+.sub-subscribers { font-weight: 400; font-size: 12px; color: #94a3b8; }
+.sub-meta { font-size: 13px; color: #6b7280; }
+.chev { font-size: 18px; color: #9ca3af; transition: transform .15s; display: inline-block; }
+.chev.open { transform: rotate(90deg); }
+
+.posts-panel { padding: 0 16px 16px; border-top: 1px solid #f3f4f6; }
+.posts-toolbar {
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  margin: 12px 0; font-size: 13px;
+}
+.posts-toolbar button {
+  padding: 4px 10px; background: white; border: 1px solid #d1d5db;
+  border-radius: 4px; cursor: pointer; font-size: 12px; color: #1f2937;
+}
+.posts-sort.active, .posts-filter.active { background: #4f46e5; color: white; border-color: #4f46e5; }
+.posts-divider { color: #d1d5db; padding: 0 4px; }
+.posts-label { font-size: 12px; color: #6b7280; font-weight: 500; padding-right: 4px; }
+.posts-search { padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 12px; min-width: 160px; }
+
+.memory-post {
+  border: 1px solid #e5e7eb; border-radius: 6px; padding: 12px; margin-bottom: 8px;
+}
+.memory-post-title {
+  font-size: 14px; font-weight: 500; color: #1f2937; text-decoration: none;
+  display: block; margin-bottom: 6px;
+}
+.memory-post-title:hover { color: #4f46e5; text-decoration: underline; }
+.memory-post-meta {
+  display: flex; gap: 12px; flex-wrap: wrap; font-size: 12px; color: #6b7280;
+  margin-bottom: 6px; align-items: center;
+}
+.memory-post-flair {
+  background: #f3f4f6; padding: 2px 6px; border-radius: 3px; font-size: 11px;
+}
+.memory-post-gate { font-style: italic; }
+.memory-post-summary { font-size: 12px; color: #4b5563; line-height: 1.4; }
+
+.memory-pager {
+  display: flex; justify-content: center; align-items: center; gap: 16px;
+  margin: 20px 0; font-size: 13px; color: #6b7280;
+}
+.memory-pager button {
+  padding: 6px 14px; background: white; border: 1px solid #d1d5db;
+  border-radius: 6px; cursor: pointer; font-size: 13px; color: #1f2937;
+}
+.memory-pager button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* Input header: radio buttons on the left, mode-specific dropdowns on the right (same row) */
+.input-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 15px;
+}
+.mode-controls {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.mode-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: #555;
+}
+.mode-controls select {
+  padding: 4px 8px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 13px;
+  background: white;
+  cursor: pointer;
+}
+.mode-controls select:focus {
+  outline: none;
+  border-color: #0066cc;
+}
+
+button {
+  background: #0066cc;
+  color: white;
+  padding: 10px 24px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+button:hover {
+  background: #0052a3;
+}
+
+button:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+/* Status bar */
+.status-bar {
+  background: #e8f4fd;
+  padding: 12px 16px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-bar.error {
+  background: #fde8e8;
+  color: #c00;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid #0066cc;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Filter tabs */
+.filter-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.filter-tab {
+  padding: 6px 14px;
+  background: #eee;
+  border: none;
+  border-radius: 20px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.filter-tab.active {
+  background: #0066cc;
+  color: white;
+}
+
+/* Results sections */
+.results-section {
+  background: white;
+  padding: 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  min-width: 0;  /* let flex children shrink and wrap text */
+}
+
+/* Side-by-side row containing Selected Posts (left) and Suggestions (right) */
+.results-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+.results-row > .results-section {
+  margin-bottom: 0;  /* the row itself handles spacing to Section 3 below */
+}
+@media (max-width: 900px) {
+  .results-row { grid-template-columns: 1fr; }  /* stack on narrow screens */
+}
+
+/* Post card */
+.post-card {
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: #fafafa;
+}
+
+/* Visually-demoted variant for posts with score < LOW_SCORE_THRESHOLD.
+ * Slightly greyer slate background + darker outline so they read as secondary,
+ * but font sizes and colors stay identical to the default card. */
+.post-card.low-score {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+/* Italic note placed between the high-score and low-score groups inside a results section */
+.low-score-banner {
+  font-size: 12px;
+  font-style: italic;
+  color: #64748b;
+  margin: 16px 0 8px;
+  padding-left: 4px;
+}
+
+/* Click-to-expand chevron used inside low-score cards to reveal comment / strategy bodies */
+.collapsible-toggle {
+  background: none;
+  border: none;
+  color: #4f46e5;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 6px 0;
+  margin-top: 8px;
+}
+.collapsible-toggle:hover { text-decoration: underline; }
+
+.post-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.post-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a1a1a;
+  margin-bottom: 4px;
+}
+
+.post-title a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.post-title a:hover {
+  color: #0066cc;
+}
+
+.post-meta {
+  font-size: 12px;
+  color: #666;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.post-summary {
+  font-size: 13px;
+  color: #555;
+  margin: 8px 0;
+  font-style: italic;
+}
+
+/* Reasoning box - shows LLM evaluation/scoring reasoning */
+.reasoning-box {
+  font-size: 12px;
+  color: #4a5568;
+  background: #f7fafc;
+  border-left: 3px solid #667eea;
+  padding: 8px 12px;
+  margin: 10px 0;
+  border-radius: 0 4px 4px 0;
+}
+
+.reasoning-box strong {
+  color: #4c51bf;
+}
+
+/* Tags */
+.tag {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.tag.pass {
+  background: #d4edda;
+  color: #155724;
+}
+
+.tag.unsure {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.tag.fail {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.tag.error {
+  background: #e0e0e0;
+  color: #666;
+}
+
+/* Comment box */
+.comment-box {
+  background: white;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.comment-box h4 {
+  font-size: 12px;
+  color: #666;
+  margin-bottom: 6px;
+}
+
+/* Multi-source attribution line under each post title (Selected + Suggestions cards).
+ * Compact font so all subreddit chips fit on one line; wraps if there are many. */
+.post-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+  margin: 4px 0 6px;
+  color: #475569;
+  line-height: 1.4;
+}
+.post-source-chip { white-space: nowrap; }
+.post-source-chip a { color: #4f46e5; text-decoration: none; font-weight: 500; }
+.post-source-chip a:hover { text-decoration: underline; }
+.post-source-name { font-weight: 500; color: #1f2937; }
+.post-source-subs { color: #94a3b8; }
+
+/* Strategy rendered as bullet list of phrases (post_rewrite output) */
+.strategy-bullets {
+  margin: 4px 0 0;
+  padding-left: 18px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: #1f2937;
+}
+.strategy-bullets li { margin-bottom: 2px; }
+
+.comment-text {
+  font-size: 10px;          /* user request: -3 from prior 13px */
+  white-space: pre-wrap;
+  line-height: 1.5;
+}
+
+.comment-score {
+  font-size: 10px;          /* user request: -2 from prior 12px */
+  color: #6b46c1;           /* muted purple — visible on white card AND on the light-blue strategy-box bg */
+  margin-top: 8px;
+  font-style: italic;       /* additional differentiation so score line stands apart from the comment body */
+}
+
+/* LinkedIn strategy */
+.strategy-box {
+  background: #f0f7ff;
+  border: 1px solid #b3d4fc;
+  border-radius: 6px;
+  padding: 12px;
+  margin-top: 12px;
+}
+
+.scores {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.score-item {
+  font-size: 13px;
+}
+
+.score-item strong {
+  color: #0066cc;
+}
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+}
+
+/* Auth screen - centered password gate */
+.auth-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: #f5f5f5;
+}
+
+.auth-card {
+  background: white;
+  padding: 40px;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  text-align: center;
+  max-width: 380px;
+  width: 100%;
+}
+
+.auth-card h1 {
+  font-size: 20px;
+  margin-bottom: 8px;
+}
+
+.auth-card p {
+  font-size: 14px;
+  color: #666;
+  margin-bottom: 20px;
+}
+
+.password-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.password-input:focus {
+  outline: none;
+  border-color: #0066cc;
+}
+
+.auth-button {
+  width: 100%;
+  padding: 10px;
+  background: #0066cc;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.auth-button:hover {
+  background: #0052a3;
+}
+
+.auth-error {
+  color: #c00;
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+/* Header bar with logout */
+.header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.header-bar h1 {
+  margin-bottom: 0;
+}
+
+.logout-button {
+  background: transparent;
+  color: #666;
+  border: 1px solid #ddd;
+  padding: 6px 14px;
+  font-size: 13px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.logout-button:hover {
+  background: #f5f5f5;
+  color: #333;
+}

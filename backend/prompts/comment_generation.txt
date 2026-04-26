@@ -1,0 +1,58 @@
+Generate 2 Reddit comment suggestions for this post. Generated comments should not be similar and should have atleast different approach or style or perspective . Comments should use simple plain vanillla english and informal language. Do not use fancy workds and avoid emdash . Use simple english and dont use uncommon and fancy words. Avoid formulaic phrasing like 'It's not just X, it's also Y' and overuse of words like 'delve,' 'glimpse,' 'stark', etc. Never use emdash  —  Use hyphen instead -
+
+ABOUT ME:
+<USER_CONTEXT>
+
+POST DETAILS:
+Title: <TITLE>
+Body: <BODY>
+Subreddit: r/<SUBREDDIT>
+Upvotes: <SCORE>
+Comments: <NUM_COMMENTS>
+
+COMMENT STYLE GUIDELINES:
+- Add fresh perspective in plain English, informal tone
+- Long, super high value, positive/nice, casual
+- Can use bullet points
+- Can be critical but always polite and nice
+- Comments can provide expert insights from my areas of expertise (see ABOUT ME above)
+- Comments can Add data or best practices from any domain
+- Reference contemporary developments where relevant
+- Can add generic advice or generic comments
+- commnets can have touching personal stories
+- comments can be like open-ended questions on controversial topics
+- Comments can be like questions about curiosity
+- Comment may add fresh perspectives 
+- Good Comments have contextual depth and high-context
+- Comments to be  helpful and add value
+- comment may have emotional authenticity
+
+SAMPLE COMMENTS FOR REFERENCE:
+SAMPLE 1:
+"Yes, costs can grow faster than expected when chaining multiple steps together, especially if each step involves separate LLM API calls.
+- Multi-step pipelines can indeed be harder to track and manage cost-wise due to the cumulative nature of the costs associated with each individual call.
+- The choice of model per step can significantly impact costs, as different models may have varying pricing structures and performance characteristics.
+- To keep costs predictable, it's beneficial to monitor and analyze the performance and costs of each step in the pipeline, allowing for adjustments and optimizations as needed.
+For more insights on managing costs and performance in agentic applications, you might find this resource helpful: <<LINK>>"
+
+SAMPLE 2:
+"You're not wrong. On the other hand:
+* $100k is a fairly small RFP and some clients want to work with smaller firms. Even some of the ones that don't can be convinced if you're positioning is tight. A lot of pub-sec RFPs have a scoring system that prioritizes small and/or women/minority-owned businesses.
+* Yes, formal proposals take a lot of time. They don't take nearly as much time after you do a few and have a library of materials. It's possible to create a very solid proposal that feels custom but only has about 10-15% new content.
+* Since OP mentioned Public Purchase, he/she is talking about the public sector. And the public sector loves nothing more than domain expertise. Get a couple of contract under your belt as a sub to a larger effort (large planning/construction projects always need public-outreach subs) and suddenly your size is less of a disadvantage because you can lean on the gov expertise."
+
+SAMPLE 3:
+"Whether people realize it or not, everyone is a business. When you're an employee you signed up for one indefinite customer. When you're an entrepreneur you're just selling more stuff.
+The question really is: will your business generate more than if you sold to one customer?
+If not, sell out"
+
+OUTPUT FORMAT:
+Return a JSON array with exactly 2 distinct comments:
+```json
+{
+  "comments": [
+    "First comment text here...",
+    "Second comment text here..."
+  ]
+}
+```
