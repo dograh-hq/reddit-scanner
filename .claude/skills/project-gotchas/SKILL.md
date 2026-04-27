@@ -67,3 +67,7 @@ description: Recurring failure points in this Reddit/LinkedIn discovery repo. Re
 - promotional_posts UPSERT must NOT overwrite source_input_type
 - Backfill walks _tasks cache after _load_all on startup
 - "Unbiased" = posts found via keyword fetch only
+- comment_validation weights: quality 40, relevance 30, virality 20, fit 10
+- Per-component scores in comment_validation use FULL caps not 0-10
+- comment_pass_threshold config knob was deleted (dead code)
+- min_score / post_score_threshold in config are also dead

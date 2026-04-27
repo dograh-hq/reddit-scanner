@@ -7,7 +7,6 @@
     "https://www.reddit.com/r/Entrepreneur/top/?t=day"
   ],
   "min_score": 5,
-  "comment_pass_threshold": 70,
   "post_score_threshold": 5,
   "retention_days": 7
 }

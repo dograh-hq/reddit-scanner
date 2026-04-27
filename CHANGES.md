@@ -1,5 +1,33 @@
 # CHANGES.md
 
+## 2026-04-27 - Comment-validation re-weighted (virality 40→20) + dead config knob removed
+
+### Bug
+Investigation: across 5 recent runs, 81 of 86 comment validations were tagged UNSURE; only 5 were PASS. Root cause: the `comment_validation.txt` prompt weighted Post Virality at 40% (40/100). After we removed the `min_score=5` filter at workflow Step 3, low-upvote posts (now flowing through) consistently scored ~5/40 on virality — dragging total_score into the 50-69 UNSURE band even when comment quality was 27-28/30 and relevance was 16-17/20. Verified by inspecting actual SQLite-stored LLM responses: high-quality comments on low-upvote posts were systematically blocked from PASS.
+
+Bonus: `config.json:comment_pass_threshold = 70` was completely unused (not read anywhere in the code). The threshold lived only inside the prompt.
+
+### Fix
+**`backend/prompts/comment_validation.txt` re-weighted (Option B):**
+- Comment Quality: 30 → **40** (now dominant — this is comment validation, after all)
+- Post Relevance: 20 → **30**
+- Post Virality: 40 → **20** (now a tiebreaker, not a gate)
+- Community Fit: 10 (unchanged)
+- Total still 100; thresholds unchanged (PASS ≥70, UNSURE 50-69, FAIL <50)
+
+Also fixed the prompt's contradictory output format: previously said "0-10 each" for individual scores while components were capped at 40/20/30/10. Output spec now matches the actual caps and explicitly tells the LLM to use the FULL ranges.
+
+**`backend/config.json` + `config.example.json`:**
+- Removed `comment_pass_threshold: 70` (dead — never read by any code).
+
+### Effect
+A great comment on a low-upvote post can now PASS purely on quality + relevance (max 40+30+10 = 80, well above the 70 threshold). A mediocre comment on a viral post still struggles to pass since quality caps everything. Virality remains as a small tiebreaker bonus.
+
+### Out of scope
+- `min_score` and `post_score_threshold` in config.json are ALSO unused (only `min_score` appears in a load_config fallback dict + a stale comment + the dead `apify_client.filter_posts_by_score` helper). Left them in place — flag for a future cleanup pass.
+
+---
+
 ## 2026-04-27 - Unbias the bank aggregates: keyword-finds counter as default sort
 
 ### The bias problem
