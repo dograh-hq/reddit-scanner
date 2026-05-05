@@ -71,3 +71,5 @@ description: Recurring failure points in this Reddit/LinkedIn discovery repo. Re
 - Per-component scores in comment_validation use FULL caps not 0-10
 - comment_pass_threshold config knob was deleted (dead code)
 - min_score / post_score_threshold in config are also dead
+- Frontend timestamps forced to IST via Asia/Kolkata
+- Backend stores UTC; only display layer is IST

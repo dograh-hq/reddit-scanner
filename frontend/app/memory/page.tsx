@@ -234,7 +234,7 @@ export default function MemoryPage() {
             <span className="sub-meta">
               {/* Unbiased on the LEFT, total on the RIGHT — matches the dashboard's default sort */}
               <strong>{s.keyword_count}</strong> unbiased · {s.post_count} total
-              {" · last "}{new Date(s.last_saved_at).toLocaleDateString()}
+              {" · last "}{new Date(s.last_saved_at).toLocaleDateString(undefined, { timeZone: "Asia/Kolkata" })}
             </span>
             <span className="sub-hint">{openSub === s.subreddit ? "Click to collapse" : "Click to view posts"}</span>
             <span className={openSub === s.subreddit ? "chev open" : "chev"}>›</span>
@@ -339,7 +339,7 @@ function PostsPanel({
             <span>{p.upvotes} upvotes</span>
             <span>{p.num_comments} comments</span>
             {p.created_utc && (
-              <span>{new Date(p.created_utc).toLocaleDateString()}</span>
+              <span>{new Date(p.created_utc).toLocaleDateString(undefined, { timeZone: "Asia/Kolkata" })}</span>
             )}
             <span className="memory-post-gate">via {p.qualifying_gate}</span>
           </div>

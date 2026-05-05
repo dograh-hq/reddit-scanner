@@ -290,7 +290,7 @@ export default function PromoPage() {
             {p.flair && <span className="memory-post-flair">{p.flair}</span>}
             <span>{p.upvotes} upvotes</span>
             <span>{p.num_comments} comments</span>
-            {p.created_utc && <span>{new Date(p.created_utc).toLocaleDateString()}</span>}
+            {p.created_utc && <span>{new Date(p.created_utc).toLocaleDateString(undefined, { timeZone: "Asia/Kolkata" })}</span>}
             {p.author && <span>u/{p.author}</span>}
           </div>
 

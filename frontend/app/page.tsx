@@ -959,7 +959,7 @@ export default function Home() {
           <option value="">Load previous run...</option>
           {history.map((h) => (
             <option key={h.task_id} value={h.task_id}>
-              {new Date(h.timestamp).toLocaleString()} - {h.input_type} ({h.status})
+              {new Date(h.timestamp).toLocaleString(undefined, { timeZone: "Asia/Kolkata" })} IST - {h.input_type} ({h.status})
             </option>
           ))}
         </select>

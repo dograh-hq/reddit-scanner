@@ -1,5 +1,24 @@
 # CHANGES.md
 
+## 2026-05-05 - Frontend timestamps render in IST (Asia/Kolkata)
+
+### Reason
+All UI date/time displays now show IST regardless of the viewer's browser timezone. Backend storage stays UTC (canonical) — this is purely a display change.
+
+### Changes
+- `frontend/app/page.tsx:962` — history dropdown timestamp: `toLocaleString(undefined, { timeZone: "Asia/Kolkata" })` + ` IST` suffix so the user can see at a glance the zone is forced.
+- `frontend/app/memory/page.tsx:237` — subreddit row "last saved" date.
+- `frontend/app/memory/page.tsx:342` — Reddit post date inside Memory Bank.
+- `frontend/app/promo/page.tsx:293` — Reddit post date inside Promo Bank.
+
+All four use the same `{ timeZone: "Asia/Kolkata" }` option with `undefined` locale (so the user's browser format style is preserved; only the zone is forced).
+
+### Out of scope
+- Backend storage stays in UTC ISO strings (canonical). No DB / SQLite changes.
+- Backend log files (`logs/api_calls.log`, server stdout) remain in server-local time — those are dev-facing.
+
+---
+
 ## 2026-05-05 - Bedrock model ID moved to env; default switched to Opus 4.6
 
 ### Reason
