@@ -959,7 +959,9 @@ export default function Home() {
           <option value="">Load previous run...</option>
           {history.map((h) => (
             <option key={h.task_id} value={h.task_id}>
-              {new Date(h.timestamp).toLocaleString(undefined, { timeZone: "Asia/Kolkata" })} IST - {h.input_type} ({h.status})
+              {/* Backend stores t.created_at as a naive UTC ISO string (no Z); JS would otherwise parse it
+                  as local time. Append "Z" so the parser correctly treats it as UTC, then format in IST. */}
+              {new Date(h.timestamp + "Z").toLocaleString(undefined, { timeZone: "Asia/Kolkata" })} IST - {h.input_type} ({h.status})
             </option>
           ))}
         </select>

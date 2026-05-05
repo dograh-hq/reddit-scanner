@@ -234,7 +234,8 @@ export default function MemoryPage() {
             <span className="sub-meta">
               {/* Unbiased on the LEFT, total on the RIGHT — matches the dashboard's default sort */}
               <strong>{s.keyword_count}</strong> unbiased · {s.post_count} total
-              {" · last "}{new Date(s.last_saved_at).toLocaleDateString(undefined, { timeZone: "Asia/Kolkata" })}
+              {/* last_saved_at is a naive UTC ISO from the backend (no Z) — append "Z" so JS parses as UTC */}
+              {" · last "}{new Date(s.last_saved_at + "Z").toLocaleDateString(undefined, { timeZone: "Asia/Kolkata" })}
             </span>
             <span className="sub-hint">{openSub === s.subreddit ? "Click to collapse" : "Click to view posts"}</span>
             <span className={openSub === s.subreddit ? "chev open" : "chev"}>›</span>

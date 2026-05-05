@@ -1,6 +1,6 @@
 # CHANGES.md
 
-## 2026-05-05 - Frontend timestamps render in IST (Asia/Kolkata)
+## 2026-05-05 - Frontend timestamps render in IST (Asia/Kolkata) + UTC parse fix
 
 ### Reason
 All UI date/time displays now show IST regardless of the viewer's browser timezone. Backend storage stays UTC (canonical) — this is purely a display change.
@@ -13,9 +13,17 @@ All UI date/time displays now show IST regardless of the viewer's browser timezo
 
 All four use the same `{ timeZone: "Asia/Kolkata" }` option with `undefined` locale (so the user's browser format style is preserved; only the zone is forced).
 
+### Follow-up fix (same date)
+The history dropdown was still showing UTC time mislabeled as IST after the above change. Root cause: the backend stores `tasks.created_at` and `memory_subreddits.last_saved_at` via `datetime.utcnow().isoformat()`, which produces strings WITHOUT a `Z` suffix or `+HH:MM` offset (e.g. `'2026-04-26T20:42:29.426364'`). Per ECMAScript spec, ISO date-time strings without a timezone designator are parsed as **local time**, not UTC — so `new Date(stored)` thought the timestamp was already in the browser's local zone, and the IST conversion was a no-op (or worse, double-applied).
+
+**Fix**: append `+ "Z"` to those two timestamp strings before parsing. JS now correctly interprets as UTC, then converts to IST. Verified empirically with a Node test — display went from `8:42 PM` (raw UTC mislabeled) to `2:12 AM` next day (correct IST).
+
+The Apify-sourced `created_utc` field already has `Z` (verified in SQLite samples) so no fix needed there.
+
 ### Out of scope
 - Backend storage stays in UTC ISO strings (canonical). No DB / SQLite changes.
 - Backend log files (`logs/api_calls.log`, server stdout) remain in server-local time — those are dev-facing.
+- Switching backend to timezone-aware datetimes (`datetime.now(timezone.utc)`) is a future cleanup — for now the frontend `+ "Z"` hack handles both old and new rows uniformly.
 
 ---
 
