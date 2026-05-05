@@ -1,10 +1,12 @@
 """
-Bedrock LLM client - Claude Opus 4.7 via AWS Bedrock Converse API.
+Bedrock LLM client - Claude Opus via AWS Bedrock Converse API.
 All workflow LLM calls (evaluation, generation, batched validation/scoring/strategy) go through here.
+Model is configurable via the BEDROCK_MODEL_ID env var (see backend/.env.example).
 """
 import asyncio
 import json
 import logging
+import os
 import re
 from datetime import datetime
 from pathlib import Path
@@ -17,9 +19,11 @@ logger = logging.getLogger(__name__)
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
-# Bedrock Converse API endpoint - cross-region inference profile for Opus 4.7
+# Bedrock Converse API endpoint. Model ID lives in env so we can swap Opus versions
+# (4.6 ↔ 4.7 ↔ next) without redeploying. Default is the currently-available Opus on
+# our account; override via BEDROCK_MODEL_ID in .env when a newer version is reachable.
 BEDROCK_REGION = "us-east-1"
-BEDROCK_MODEL_ID = "us.anthropic.claude-opus-4-7"
+BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-opus-4-6-v1")
 BEDROCK_URL = f"https://bedrock-runtime.{BEDROCK_REGION}.amazonaws.com/model/{BEDROCK_MODEL_ID}/converse"
 
 # Cap concurrent Bedrock calls so step 5 fan-out doesn't trip rate limits
@@ -27,7 +31,8 @@ CONCURRENCY = 5
 
 
 class LLMClient:
-    """Claude Opus 4.7 client. Wraps Bedrock Converse with token logging + JSON parsing."""
+    """Claude Opus (Bedrock) client. Wraps the Converse API with token logging + JSON parsing.
+    Model identifier comes from the BEDROCK_MODEL_ID env var — see module docstring."""
 
     def __init__(self, api_key: str):
         self.api_key = api_key
@@ -61,10 +66,11 @@ class LLMClient:
         positional args and have safe defaults. All in-tree callers pass them as kwargs, so
         no existing call site breaks.
         """
-        # 32K output tokens — Opus 4.7 supports up to 128K, but 32K is comfortably above
-        # our worst-case batch size (5 keywords × 20 posts × ~200 tok/entry ≈ 20K) without
-        # being wasteful. Without an explicit cap, Bedrock applies the model default (~4K)
-        # and large batches silently truncate mid-array, causing parse failures and post drops.
+        # 32K output tokens — comfortably above our worst-case batch size
+        # (5 keywords × 20 posts × ~200 tok/entry ≈ 20K) without being wasteful. All
+        # current Opus models on Bedrock support ≥32K output. Without an explicit cap,
+        # Bedrock applies the model default (~4K) and large batches silently truncate
+        # mid-array, causing parse failures and post drops.
         payload = {
             "messages": [
                 {"role": "user", "content": [{"text": prompt}]}

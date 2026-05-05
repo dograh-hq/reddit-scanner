@@ -1,6 +1,6 @@
 <system_context>
 FastAPI backend for Reddit comment generation and Reddit/LinkedIn post repurposing.
-Fetches Reddit posts via Apify API, evaluates them with Claude Opus 4.7 (Bedrock), generates comments (parallel), and scores/strategizes/validates posts in single-batch LLM calls.
+Fetches Reddit posts via Apify API, evaluates them with Claude Opus (Bedrock; model ID via `BEDROCK_MODEL_ID` env), generates comments (parallel), and scores/strategizes/validates posts in single-batch LLM calls.
 </system_context>
 
 <file_map>
@@ -9,7 +9,7 @@ Fetches Reddit posts via Apify API, evaluates them with Claude Opus 4.7 (Bedrock
 - `workflow.py` - 11-step linear workflow orchestrator (parallel step 5; batched 6/8/9)
 - `storage.py` - SQLite-backed storage with in-memory cache, 7-day retention (configurable)
 - `apify_client.py` - Reddit scraping via Apify (URLs + keywords)
-- `llm_client.py` - Bedrock Converse client for Claude Opus 4.7 (bearer auth via httpx)
+- `llm_client.py` - Bedrock Converse client for Claude Opus (bearer auth via httpx; model ID via `BEDROCK_MODEL_ID` env)
 - `api_logger.py` - API call logging with token consumption and workflow metrics tracking
 - `config.example.json` - Public template for user/product context and defaults (committed)
 - `config.json` - User's real config; gitignored, copied from `config.example.json` on first setup
@@ -39,7 +39,7 @@ Fetches Reddit posts via Apify API, evaluates them with Claude Opus 4.7 (Bedrock
 - `/auth/verify` accepts JSON body `{password}` for frontend login flow
 
 ### LLM (Bedrock)
-- Endpoint: `https://bedrock-runtime.us-east-1.amazonaws.com/model/us.anthropic.claude-opus-4-7/converse`
+- Endpoint: `https://bedrock-runtime.us-east-1.amazonaws.com/model/${BEDROCK_MODEL_ID}/converse` (default model id `us.anthropic.claude-opus-4-6-v1`; override via env)
 - Auth: `Authorization: Bearer ${BEDROCK_API_KEY}` (NOT SigV4 / boto3)
 - Concurrency cap: `asyncio.Semaphore(5)` shared per workflow run
 
@@ -109,7 +109,7 @@ Each workflow run logs detailed metrics to `logs/api_calls.log`:
 
 <critical_notes>
 ## CRITICAL NOTES
-- **Bedrock only** - All LLM calls go through Claude Opus 4.7 via Bedrock; no OpenAI dependency
+- **Bedrock only** - All LLM calls go through Claude Opus via Bedrock (model ID from `BEDROCK_MODEL_ID` env); no OpenAI dependency
 - **Apify maxPosts** - subreddit URL: 15; keyword: 20. `scrapeComments=false`. See "Apify" section above.
 - **post_id is the cross-reference** - never trust LLM-returned `post_index`; always map results back by `post_id` echoed by the prompt
 - **Password auth required** - Set ACCESS_PASSWORD in .env, sent via X-Access-Password header

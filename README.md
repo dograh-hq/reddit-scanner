@@ -1,6 +1,6 @@
 # Reddit Comment & Reddit/LinkedIn Content Discovery
 
-Toolkit for Reddit engagement and content repurposing (Claude Opus 4.7 via AWS Bedrock + Apify).
+Toolkit for Reddit engagement and content repurposing (Claude Opus via AWS Bedrock + Apify).
 Scans Reddit for relevant posts to comment on and makes suggestions for comments. Also collects posts that can be replicated on Reddit or LinkedIn. Also collects the list of subreddits with domain relevant posts over lifetime. Also collects promotional/launch posts that can be replicated.
 
 ## Features
@@ -10,7 +10,7 @@ Scans Reddit for relevant posts to comment on and makes suggestions for comments
 - Also collects promotional/launch posts that can be replicated.
 
 - **Reddit Post Fetching**: Scan subreddits by URL or keywords via Apify
-- **Comment Generation**: Claude Opus 4.7 (Bedrock) generates 2 comment suggestions per post in parallel
+- **Comment Generation**: Claude Opus (Bedrock; model ID via `BEDROCK_MODEL_ID` env) generates 2 comment suggestions per post in parallel
 - **Comment Validation**: Single batched LLM call scores and tags (PASS/UNSURE/FAIL) all comments
 - **Reddit + LinkedIn Repurposing**: Identifies viral posts I can repurpose as my own Reddit or LinkedIn content
 - **Rewrite Strategies**: Single batched call generates strategy paragraphs (not actual posts), calling out best channel
@@ -105,9 +105,10 @@ Copy `backend/config.example.json` to `backend/config.json` and edit:
 
 ## LLM (Bedrock)
 
-All LLM calls go through Claude Opus 4.7 on AWS Bedrock via the Converse API:
+All LLM calls go through Claude Opus on AWS Bedrock via the Converse API:
 
-- Endpoint: `https://bedrock-runtime.us-east-1.amazonaws.com/model/us.anthropic.claude-opus-4-7/converse`
+- Endpoint: `https://bedrock-runtime.us-east-1.amazonaws.com/model/${BEDROCK_MODEL_ID}/converse`
+- Model: configurable via `BEDROCK_MODEL_ID` env (defaults to `us.anthropic.claude-opus-4-6-v1`; set to `us.anthropic.claude-opus-4-7` once 4.7 returns to your account)
 - Auth: `Authorization: Bearer ${BEDROCK_API_KEY}` (Bedrock API key, not SigV4 / boto3)
 - Concurrency cap: `Semaphore(5)` per workflow run
 
@@ -144,7 +145,7 @@ pm2 save
 
 - **Backend**: FastAPI, Python 3.13
 - **Frontend**: Next.js 15, React 19
-- **LLM**: Claude Opus 4.7 via AWS Bedrock Converse API
+- **LLM**: Claude Opus via AWS Bedrock Converse API (model ID via `BEDROCK_MODEL_ID` env)
 - **Reddit API**: Apify Reddit Scraper
 - **Storage**: SQLite at `backend/data/tasks.db` with in-memory cache (7-day retention)
 

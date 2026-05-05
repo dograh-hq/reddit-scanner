@@ -5,7 +5,7 @@ description: Recurring failure points in this Reddit/LinkedIn discovery repo. Re
 
 # Project gotchas
 
-- All LLM calls go through Bedrock Opus 4.7 (no OpenAI)
+- All LLM calls go through Bedrock Opus (model ID from BEDROCK_MODEL_ID env; no OpenAI)
 - Bedrock auth is bearer key, not SigV4 / boto3
 - Apify maxPosts: 15 subreddit, 20 keyword
 - Apify keyword must wrap in quotes for exact phrase

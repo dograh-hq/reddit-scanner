@@ -1,5 +1,30 @@
 # CHANGES.md
 
+## 2026-05-05 - Bedrock model ID moved to env; default switched to Opus 4.6
+
+### Reason
+Opus 4.7 is temporarily unavailable on the Bedrock account. Need to fall back to 4.6 now and round-trip back to 4.7 (or forward to a newer Opus) without touching code.
+
+### Changes
+- **`backend/llm_client.py`**: `BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-opus-4-6-v1")`. Existing `BEDROCK_URL` f-string and `LLMClient.__init__` pick up the constant unchanged. Module docstring + class docstring + maxTokens comment rewritten to be model-agnostic.
+- **`backend/.env.example`**: added `BEDROCK_MODEL_ID=us.anthropic.claude-opus-4-6-v1` with an inline comment showing how to override (e.g. `us.anthropic.claude-opus-4-7` when 4.7 returns).
+- **Docs swept** to drop hardcoded "Opus 4.7" mentions in favour of env-driven language: `README.md` (5 mentions, including the endpoint URL), `CLAUDE.md` (3 mentions), `backend/CLAUDE.md` (4 mentions, including endpoint URL), `.claude/skills/project-gotchas/SKILL.md` (1 mention).
+
+### How to switch back to Opus 4.7
+Set `BEDROCK_MODEL_ID=us.anthropic.claude-opus-4-7` in `backend/.env` and restart the backend. No code change needed.
+
+### Verified
+- Default kicks in when env not set: `BEDROCK_MODEL_ID = us.anthropic.claude-opus-4-6-v1`, URL assembles correctly.
+- Env override works: setting the env to `us.anthropic.claude-opus-4-7` produces the 4.7 URL.
+
+### Out of scope
+- `BEDROCK_REGION` stays hardcoded (not asked).
+- `inferenceConfig.maxTokens=32000` stays at 32K (Opus 4.6 also supports ≥32K output).
+- `todo-project-doc.md` mentions "Opus 4.7" in stale doc text — left alone (other inaccuracies in same file).
+- Historical CHANGES.md entries that mention "Opus 4.7" are dated history and stay as-is.
+
+---
+
 ## 2026-04-27 - Comment-validation re-weighted (virality 40→20) + dead config knob removed
 
 ### Bug
