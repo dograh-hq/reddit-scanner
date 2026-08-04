@@ -61,7 +61,7 @@ def log_llm_call(
 
     log_entry = {
         "timestamp": datetime.utcnow().isoformat(),
-        "api": "bedrock",
+        "api": "openai",
         "type": call_type,
         "model": model,
         "success": success,
@@ -162,7 +162,7 @@ def get_token_summary() -> dict:
         for line in f:
             try:
                 entry = json.loads(line.strip())
-                if entry.get("api") == "bedrock":
+                if entry.get("api") in ("openai", "bedrock"):  # count new + historical LLM log lines
                     tokens = entry.get("tokens", {}).get("total", 0)
                     call_type = entry.get("type", "unknown")
 

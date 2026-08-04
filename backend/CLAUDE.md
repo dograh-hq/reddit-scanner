@@ -1,6 +1,6 @@
 <system_context>
 FastAPI backend for Reddit comment generation and Reddit/LinkedIn post repurposing.
-Fetches Reddit posts via Apify API, evaluates them with Claude Opus (Bedrock; model ID via `BEDROCK_MODEL_ID` env), generates comments (parallel), and scores/strategizes/validates posts in single-batch LLM calls.
+Fetches Reddit posts via Apify API, evaluates them with OpenAI (Chat Completions; two models chosen per call_type via env), generates comments (parallel), and scores/strategizes/validates posts in single-batch LLM calls.
 </system_context>
 
 <file_map>
@@ -9,7 +9,7 @@ Fetches Reddit posts via Apify API, evaluates them with Claude Opus (Bedrock; mo
 - `workflow.py` - 11-step linear workflow orchestrator (parallel step 5; batched 6/8/9)
 - `storage.py` - SQLite-backed storage with in-memory cache, 7-day retention (configurable)
 - `apify_client.py` - Reddit scraping via Apify (URLs + keywords)
-- `llm_client.py` - Bedrock Converse client for Claude Opus (bearer auth via httpx; model ID via `BEDROCK_MODEL_ID` env)
+- `llm_client.py` - OpenAI Chat Completions client (bearer auth via raw httpx, no openai SDK; two models by call_type via env)
 - `api_logger.py` - API call logging with token consumption and workflow metrics tracking
 - `config.example.json` - Public template for user/product context and defaults (committed)
 - `config.json` - User's real config; gitignored, copied from `config.example.json` on first setup
@@ -38,9 +38,13 @@ Fetches Reddit posts via Apify API, evaluates them with Claude Opus (Bedrock; mo
 - Uses `secrets.compare_digest` for timing-safe comparison
 - `/auth/verify` accepts JSON body `{password}` for frontend login flow
 
-### LLM (Bedrock)
-- Endpoint: `https://bedrock-runtime.us-east-1.amazonaws.com/model/${BEDROCK_MODEL_ID}/converse` (default model id `us.anthropic.claude-opus-4-6-v1`; override via env)
-- Auth: `Authorization: Bearer ${BEDROCK_API_KEY}` (NOT SigV4 / boto3)
+### LLM (OpenAI)
+- Endpoint: `https://api.openai.com/v1/chat/completions` (raw httpx, no openai SDK)
+- **Two models chosen per `call_type`** (see `GENERATION_CALL_TYPES` in `llm_client.py`): `OPENAI_MODEL_ANALYSIS` (default `gpt-5.6-luna`) for high-context analysis/scoring/classification; `OPENAI_MODEL_GENERATION` (default `gpt-5.6-terra`) for the two generation calls (`comment_generation`, `post_strategy`). Both overridable via env.
+- Auth: `Authorization: Bearer ${OPENAI_API_KEY}`
+- Payload sends NO output-token cap and NO `reasoning_effort` — the model uses its full default output budget (OpenAI, unlike Bedrock, does not clamp to a tiny default); temperature also left unset (reasoning-model safe)
+- Response parsed from `choices[0].message.content`; tokens from `usage.prompt_tokens / completion_tokens / total_tokens`
+- Each `call_log` record now carries the resolved `model` (surfaced in the Prompt Debugger)
 - Concurrency cap: `asyncio.Semaphore(5)` shared per workflow run
 
 ### Workflow Steps (workflow.py)
@@ -109,7 +113,7 @@ Each workflow run logs detailed metrics to `logs/api_calls.log`:
 
 <critical_notes>
 ## CRITICAL NOTES
-- **Bedrock only** - All LLM calls go through Claude Opus via Bedrock (model ID from `BEDROCK_MODEL_ID` env); no OpenAI dependency
+- **OpenAI only** - All LLM calls go through OpenAI Chat Completions via raw httpx (no SDK); two models by call_type (analysis=`gpt-5.6-luna`, generation=`gpt-5.6-terra`), both via env; no Bedrock/Anthropic dependency
 - **Apify maxPosts** - subreddit URL: 15; keyword: 20. `scrapeComments=false`. See "Apify" section above.
 - **post_id is the cross-reference** - never trust LLM-returned `post_index`; always map results back by `post_id` echoed by the prompt
 - **Password auth required** - Set ACCESS_PASSWORD in .env, sent via X-Access-Password header

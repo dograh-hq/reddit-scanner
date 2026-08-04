@@ -1,5 +1,42 @@
 # CHANGES.md
 
+## 2026-08-05 - Fix: OpenAI model `.env` overrides now take effect
+
+### Reason
+`OPENAI_MODEL_ANALYSIS` / `OPENAI_MODEL_GENERATION` were read via `os.getenv` at **module-import time** in `llm_client.py`. `main.py` imports the module (line 17) before calling `load_dotenv()` (line 20), so values set only in `.env` were read too late and silently ignored — the code always fell back to the baked-in defaults. (Harmless today since defaults matched the desired models, and pre-existing — Bedrock's `BEDROCK_MODEL_ID` had the same pattern — but it defeated the intended env-swappability. `OPENAI_API_KEY` was unaffected; it's read at request time.)
+
+### Changes
+- `backend/llm_client.py` — module-level `OPENAI_MODEL_*` getenv constants replaced with plain `DEFAULT_MODEL_*` strings; the env is now read inside `LLMClient.__init__` (`self.analysis_model` / `self.generation_model`), which is constructed per run (well after `load_dotenv()`); `_call_llm` selects from the instance attrs. Env var **names unchanged**, so `.env.example` / docs stay accurate.
+- `.claude/skills/project-gotchas/SKILL.md` — added gotcha: read model env in `__init__`, not import.
+
+### Out of scope
+- Optional error-body capture for HTTP failures (a wrong model name still surfaces as a generic 400) was considered and declined.
+
+---
+
+## 2026-08-04 - LLM provider switched from Bedrock (Claude Opus) to OpenAI, two-tier by call type
+
+### Reason
+Moving all LLM traffic to OpenAI. Additionally, cost/quality is tuned per task: high-context analysis/scoring/classification calls use a cheaper model, while the two creative-generation calls use a costlier one.
+
+### Changes
+- `backend/llm_client.py` — rewrote `_call_llm` to call OpenAI Chat Completions (`https://api.openai.com/v1/chat/completions`) via raw httpx (no SDK). Bearer `OPENAI_API_KEY`. Payload sends only `model` + `messages` — no output-token cap and no `reasoning_effort` (the model uses its full default output budget; OpenAI, unlike Bedrock, does not clamp to a tiny default so batches don't truncate); temperature left unset. Response parsed from `choices[0].message.content`; tokens from `usage.prompt_tokens / completion_tokens / total_tokens`.
+  - **Two models chosen per `call_type`**: `OPENAI_MODEL_ANALYSIS` (default `gpt-5.6-luna`) for everything except generation; `OPENAI_MODEL_GENERATION` (default `gpt-5.6-terra`) for `GENERATION_CALL_TYPES = {comment_generation, post_strategy}`. Both env-overridable.
+  - Removed Bedrock constants (`BEDROCK_REGION/MODEL_ID/URL`) and `self.model`; the resolved model is now computed per call and also recorded in each `call_log` record (surfaced in the Prompt Debugger).
+  - All 7 public methods and the JSON-salvage parser are unchanged — the swap is localized to `_call_llm` + module constants.
+- `backend/main.py` — reads `OPENAI_API_KEY` (was `BEDROCK_API_KEY`) and passes it through to `run_workflow`.
+- `backend/workflow.py` — `run_workflow` param renamed `bedrock_api_key` → `openai_api_key`; `LLMClient(...)` call updated.
+- `backend/api_logger.py` — LLM log line `"api"` tag is now `"openai"`; `get_token_summary` counts both `"openai"` and historical `"bedrock"` lines.
+- `backend/.env.example` — `BEDROCK_*` replaced with `OPENAI_API_KEY` + `OPENAI_MODEL_ANALYSIS` / `OPENAI_MODEL_GENERATION`.
+- Docs — `CLAUDE.md` (root + backend), `README.md`, and `.claude/skills/project-gotchas/SKILL.md` updated to OpenAI; gotchas added (two-tier model rule, `max_completion_tokens`, no temperature, response shape).
+
+### Out of scope / unchanged
+- `requirements.txt` — no change (still no LLM SDK; raw httpx as before).
+- Prompt templates, workflow steps, storage, Apify, frontend — all unchanged.
+- Model tier for Step 8 (`post_strategy`) is a judgment call — currently on the generation model; flip by editing `GENERATION_CALL_TYPES`.
+
+---
+
 ## 2026-05-05 - Frontend timestamps render in IST (Asia/Kolkata) + UTC parse fix
 
 ### Reason

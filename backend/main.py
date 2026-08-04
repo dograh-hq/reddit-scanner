@@ -123,9 +123,9 @@ async def start_run(request: RunRequest, background_tasks: BackgroundTasks):
 
     # Get API keys
     apify_token = os.getenv("APIFY_API_TOKEN")
-    bedrock_api_key = os.getenv("BEDROCK_API_KEY")
+    openai_api_key = os.getenv("OPENAI_API_KEY")
 
-    if not apify_token or not bedrock_api_key:
+    if not apify_token or not openai_api_key:
         raise HTTPException(500, "Missing API keys in environment")
 
     # Create task
@@ -135,7 +135,7 @@ async def start_run(request: RunRequest, background_tasks: BackgroundTasks):
 
     # Run workflow in background; mode-specific overrides ignored when not applicable
     background_tasks.add_task(run_workflow, task_id, request.input_type,
-                              request.inputs, apify_token, bedrock_api_key,
+                              request.inputs, apify_token, openai_api_key,
                               request.timeframe, request.sort, request.max_posts,
                               request.sub_type, request.sub_timeframe)
 

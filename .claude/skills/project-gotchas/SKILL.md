@@ -5,8 +5,14 @@ description: Recurring failure points in this Reddit/LinkedIn discovery repo. Re
 
 # Project gotchas
 
-- All LLM calls go through Bedrock Opus (model ID from BEDROCK_MODEL_ID env; no OpenAI)
-- Bedrock auth is bearer key, not SigV4 / boto3
+- All LLM calls go through OpenAI Chat Completions (no Bedrock/Anthropic)
+- OpenAI auth is Bearer OPENAI_API_KEY via raw httpx (no openai SDK)
+- Two models by call_type: luna=analysis/scoring, terra=generation
+- Read model env in __init__, not import (load_dotenv timing)
+- Generation call_types = comment_generation, post_strategy → terra
+- Send NO token-cap / reasoning_effort params — use model defaults
+- Never set temperature — reasoning models reject non-default
+- OpenAI response: choices[0].message.content; usage.prompt/completion_tokens
 - Apify maxPosts: 15 subreddit, 20 keyword
 - Apify keyword must wrap in quotes for exact phrase
 - Cross-reference posts by post_id, not post_index
@@ -25,7 +31,7 @@ description: Recurring failure points in this Reddit/LinkedIn discovery repo. Re
 - Cross-posted PASS/UNSURE counts in EVERY source subreddit
 - Strategy prompt outputs bullet phrases, not paragraphs
 - Subscriber count formatted as 21k via fmtK helper
-- Bedrock payload MUST set inferenceConfig.maxTokens (default 4K truncates batches)
+- OpenAI omits output cap — defaults to full model budget (no truncation)
 - Dedup canonical key requires title length >= 20 to use (title, author)
 - Dedup merge keeps MAX score / num_comments across copies
 - Step 4 / 7 silent drops surface to task.error_log

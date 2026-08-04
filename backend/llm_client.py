@@ -1,7 +1,9 @@
 """
-Bedrock LLM client - Claude Opus via AWS Bedrock Converse API.
+OpenAI LLM client - Chat Completions API via raw httpx (no openai SDK).
 All workflow LLM calls (evaluation, generation, batched validation/scoring/strategy) go through here.
-Model is configurable via the BEDROCK_MODEL_ID env var (see backend/.env.example).
+Two models, chosen per call_type: high-context analysis/scoring/classification calls use
+OPENAI_MODEL_ANALYSIS (cheaper); creative generation calls use OPENAI_MODEL_GENERATION (costlier).
+Both are configurable via env vars (see backend/.env.example).
 """
 import asyncio
 import json
@@ -19,27 +21,35 @@ logger = logging.getLogger(__name__)
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
 
-# Bedrock Converse API endpoint. Model ID lives in env so we can swap Opus versions
-# (4.6 ↔ 4.7 ↔ next) without redeploying. Default is the currently-available Opus on
-# our account; override via BEDROCK_MODEL_ID in .env when a newer version is reachable.
-BEDROCK_REGION = "us-east-1"
-BEDROCK_MODEL_ID = os.getenv("BEDROCK_MODEL_ID", "us.anthropic.claude-opus-4-6-v1")
-BEDROCK_URL = f"https://bedrock-runtime.{BEDROCK_REGION}.amazonaws.com/model/{BEDROCK_MODEL_ID}/converse"
+# OpenAI Chat Completions endpoint.
+OPENAI_API_URL = "https://api.openai.com/v1/chat/completions"
 
-# Cap concurrent Bedrock calls so step 5 fan-out doesn't trip rate limits
+# Two-tier model defaults (see module docstring). Overridden via env at client-init time
+# (read in __init__, NOT here — module import runs before main.py's load_dotenv(), so an
+# import-time getenv would miss .env overrides and silently use these defaults).
+DEFAULT_MODEL_ANALYSIS = "gpt-5.6-luna"      # high-context analysis/scoring
+DEFAULT_MODEL_GENERATION = "gpt-5.6-terra"   # creative generation/writing
+
+# call_types that are creative generation → costlier model; everything else → analysis model.
+GENERATION_CALL_TYPES = {"comment_generation", "post_strategy"}
+
+# Cap concurrent OpenAI calls so step 5 fan-out doesn't trip rate limits
 CONCURRENCY = 5
 
 
 class LLMClient:
-    """Claude Opus (Bedrock) client. Wraps the Converse API with token logging + JSON parsing.
-    Model identifier comes from the BEDROCK_MODEL_ID env var — see module docstring."""
+    """OpenAI Chat Completions client. Wraps the API with token logging + JSON parsing.
+    The model is chosen per call from OPENAI_MODEL_ANALYSIS / OPENAI_MODEL_GENERATION — see module docstring."""
 
     def __init__(self, api_key: str):
         self.api_key = api_key
-        self.model = BEDROCK_MODEL_ID
+        # Read model ids here (not at import) so .env values loaded by load_dotenv() take
+        # effect — LLMClient is constructed per run, well after startup env loading.
+        self.analysis_model = os.getenv("OPENAI_MODEL_ANALYSIS", DEFAULT_MODEL_ANALYSIS)
+        self.generation_model = os.getenv("OPENAI_MODEL_GENERATION", DEFAULT_MODEL_GENERATION)
         # Single semaphore shared across all calls from one workflow run
         self.sem = asyncio.Semaphore(CONCURRENCY)
-        self.timeout = httpx.Timeout(300.0)  # 5 min - Opus reasoning can be slow
+        self.timeout = httpx.Timeout(300.0)  # 5 min - large reasoning calls can be slow
         # Per-instance debug log of every prompt/response, in finish order. Workflow snapshots this
         # into task.llm_calls at every step boundary so the Prompt Debugger UI can render it.
         # NOTE: `_seq` read/modify/write is NOT atomic across `asyncio.gather` await points — but
@@ -59,23 +69,26 @@ class LLMClient:
     async def _call_llm(self, prompt: str, call_type: str = "unknown",
                         step_name: str = "Unknown",
                         group_id: str | None = None) -> str:
-        """Bedrock Converse API call with bearer auth. Logs tokens, raises on HTTP error.
+        """OpenAI Chat Completions call with bearer auth. Logs tokens, raises on HTTP error.
+        The model is selected from call_type: generation call_types → OPENAI_MODEL_GENERATION,
+        everything else → OPENAI_MODEL_ANALYSIS.
         `step_name` and `group_id` populate the per-instance call_log so the Prompt Debugger
         UI can group calls by workflow step and parallel-fan-out group.
         BACKWARD-COMPAT INVARIANT: `step_name` and `group_id` are appended AFTER the existing
         positional args and have safe defaults. All in-tree callers pass them as kwargs, so
         no existing call site breaks.
         """
-        # 32K output tokens — comfortably above our worst-case batch size
-        # (5 keywords × 20 posts × ~200 tok/entry ≈ 20K) without being wasteful. All
-        # current Opus models on Bedrock support ≥32K output. Without an explicit cap,
-        # Bedrock applies the model default (~4K) and large batches silently truncate
-        # mid-array, causing parse failures and post drops.
+        # Pick the model tier for this call (generation → costlier, analysis/scoring → cheaper)
+        model = self.generation_model if call_type in GENERATION_CALL_TYPES else self.analysis_model
+        # No output-token cap and no reasoning_effort param — let the model use its full default
+        # output budget. (Unlike Bedrock, OpenAI does NOT clamp to a tiny ~4K default when the cap
+        # is omitted, so large batched responses won't silently truncate.) Temperature also left
+        # at the model default.
         payload = {
+            "model": model,
             "messages": [
-                {"role": "user", "content": [{"text": prompt}]}
+                {"role": "user", "content": prompt}
             ],
-            "inferenceConfig": {"maxTokens": 32000}
         }
         headers = {
             "Authorization": f"Bearer {self.api_key}",
@@ -87,19 +100,18 @@ class LLMClient:
             try:
                 # httpx async client - non-blocking HTTP
                 async with httpx.AsyncClient(timeout=self.timeout) as client:
-                    # POST to Bedrock Converse endpoint
-                    r = await client.post(BEDROCK_URL, json=payload, headers=headers)
+                    # POST to OpenAI Chat Completions endpoint
+                    r = await client.post(OPENAI_API_URL, json=payload, headers=headers)
                     r.raise_for_status()  # raise on 4xx/5xx
                     data = r.json()  # parse JSON body
 
-                # Converse response: output.message.content is a list of blocks
-                content_blocks = data["output"]["message"]["content"]
-                content = "".join(b.get("text", "") for b in content_blocks)
+                # Chat Completions response: choices[0].message.content holds the text
+                content = data["choices"][0]["message"].get("content") or ""
 
                 usage = data.get("usage", {})
-                input_tokens = usage.get("inputTokens", 0)
-                output_tokens = usage.get("outputTokens", 0)
-                total_tokens = usage.get("totalTokens", input_tokens + output_tokens)
+                input_tokens = usage.get("prompt_tokens", 0)
+                output_tokens = usage.get("completion_tokens", 0)
+                total_tokens = usage.get("total_tokens", input_tokens + output_tokens)
 
                 log_llm_call(
                     call_type=call_type,
@@ -108,7 +120,7 @@ class LLMClient:
                     input_tokens=input_tokens,
                     output_tokens=output_tokens,
                     total_tokens=total_tokens,
-                    model=self.model,
+                    model=model,
                     success=True,
                     result_summary=content[:100],
                 )
@@ -120,7 +132,7 @@ class LLMClient:
                     "input_tokens": input_tokens, "output_tokens": output_tokens,
                     "total_tokens": total_tokens,
                     "started_at": started_at, "finished_at": datetime.utcnow().isoformat(),
-                    "success": True, "error": None,
+                    "success": True, "error": None, "model": model,
                 })
                 self._seq += 1
                 return content
@@ -132,7 +144,7 @@ class LLMClient:
                     input_tokens=0,
                     output_tokens=0,
                     total_tokens=0,
-                    model=self.model,
+                    model=model,
                     success=False,
                     error=str(e),
                 )
@@ -143,7 +155,7 @@ class LLMClient:
                     "group_id": group_id, "prompt": prompt, "response": "",
                     "input_tokens": 0, "output_tokens": 0, "total_tokens": 0,
                     "started_at": started_at, "finished_at": datetime.utcnow().isoformat(),
-                    "success": False, "error": str(e),
+                    "success": False, "error": str(e), "model": model,
                 })
                 self._seq += 1
                 raise

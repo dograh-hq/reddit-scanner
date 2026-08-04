@@ -44,7 +44,7 @@
 
 <system_context>
 Reddit Comment & Reddit/LinkedIn Content Discovery - Internal automation tool.
-Scans Reddit for posts, generates comment suggestions via Claude Opus (Bedrock; model ID via `BEDROCK_MODEL_ID` env), and identifies viral content for repurposing as Reddit or LinkedIn posts.
+Scans Reddit for posts, generates comment suggestions via OpenAI (two models chosen per call_type; ids via `OPENAI_MODEL_ANALYSIS` / `OPENAI_MODEL_GENERATION` env), and identifies viral content for repurposing as Reddit or LinkedIn posts.
 
 Failure-points skill: invoke `/project-gotchas` before any code change in this repo. Append new gotchas to `.claude/skills/project-gotchas/SKILL.md` (4-8 word lines) when surprises surface.
 </system_context>
@@ -56,7 +56,7 @@ Failure-points skill: invoke `/project-gotchas` before any code change in this r
   - `workflow.py` - 11-step workflow (parallel step 5; batched 6/8/9)
   - `storage.py` - SQLite-backed storage with in-memory cache (7-day retention)
   - `apify_client.py` - Reddit fetching
-  - `llm_client.py` - Bedrock (Claude Opus; model ID via `BEDROCK_MODEL_ID` env) integration
+  - `llm_client.py` - OpenAI Chat Completions integration (raw httpx; two models by call_type via env)
   - `/prompts/` - 6 LLM prompt templates (4 of which are batched)
   - `/data/tasks.db` - SQLite task store (gitignored)
 - `/frontend/` - Next.js React frontend
@@ -73,7 +73,7 @@ Failure-points skill: invoke `/project-gotchas` before any code change in this r
 ### Tech Stack
 - Backend: FastAPI (Python 3.13)
 - Frontend: Next.js 15, React 19
-- LLM: Claude Opus via AWS Bedrock Converse API (bearer auth, no boto3); model ID from `BEDROCK_MODEL_ID` env
+- LLM: OpenAI Chat Completions API (bearer auth via raw httpx, no SDK); two models chosen per call_type — `OPENAI_MODEL_ANALYSIS` (analysis/scoring) and `OPENAI_MODEL_GENERATION` (generation), both from env
 - Reddit: Apify scraper API
 - Storage: SQLite at `backend/data/tasks.db`, in-memory cache, 7-day retention (configurable via `config.json:retention_days`)
 

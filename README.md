@@ -1,6 +1,6 @@
 # Reddit Comment & Reddit/LinkedIn Content Discovery
 
-Toolkit for Reddit engagement and content repurposing (Claude Opus via AWS Bedrock + Apify).
+Toolkit for Reddit engagement and content repurposing (OpenAI + Apify).
 Scans Reddit for relevant posts to comment on and makes suggestions for comments. Also collects posts that can be replicated on Reddit or LinkedIn. Also collects the list of subreddits with domain relevant posts over lifetime. Also collects promotional/launch posts that can be replicated.
 
 ## Features
@@ -10,7 +10,7 @@ Scans Reddit for relevant posts to comment on and makes suggestions for comments
 - Also collects promotional/launch posts that can be replicated.
 
 - **Reddit Post Fetching**: Scan subreddits by URL or keywords via Apify
-- **Comment Generation**: Claude Opus (Bedrock; model ID via `BEDROCK_MODEL_ID` env) generates 2 comment suggestions per post in parallel
+- **Comment Generation**: OpenAI (`OPENAI_MODEL_GENERATION`, default `gpt-5.6-terra`) generates 2 comment suggestions per post in parallel
 - **Comment Validation**: Single batched LLM call scores and tags (PASS/UNSURE/FAIL) all comments
 - **Reddit + LinkedIn Repurposing**: Identifies viral posts I can repurpose as my own Reddit or LinkedIn content
 - **Rewrite Strategies**: Single batched call generates strategy paragraphs (not actual posts), calling out best channel
@@ -28,9 +28,10 @@ pip install -r requirements.txt
 # Create .env file with your API keys and access password
 cp .env.example .env
 # Edit .env and add:
-# BEDROCK_API_KEY=your-bedrock-bearer-api-key
+# OPENAI_API_KEY=sk-your-openai-api-key
 # APIFY_API_TOKEN=apify_api_your-token
 # ACCESS_PASSWORD=your-strong-password-here
+# (optional model overrides) OPENAI_MODEL_ANALYSIS / OPENAI_MODEL_GENERATION
 Similarly for config.json
 cp config.example.json config.json
 
@@ -68,11 +69,11 @@ frontend/.env.production to have : NEXT_PUBLIC_API_BASE=http://IP:8007
 
 ### What you need to do (post-pull checklist)
 
-- Add BEDROCK_API_KEY to .env
-- Drop OPENAI_API_KEY from .env
+- Add OPENAI_API_KEY to .env
+- Drop BEDROCK_API_KEY / BEDROCK_MODEL_ID from .env
 - pip install -r requirements.txt
 - Restart backend (creates SQLite DB)
-- Smoke-test Bedrock curl
+- Smoke-test OpenAI curl
 - Run single subreddit
 - Confirm ~10 LLM calls
 - Verify history persists after restart
@@ -103,13 +104,14 @@ Copy `backend/config.example.json` to `backend/config.json` and edit:
 
 `config.json` is gitignored, so your personal details stay local.
 
-## LLM (Bedrock)
+## LLM (OpenAI)
 
-All LLM calls go through Claude Opus on AWS Bedrock via the Converse API:
+All LLM calls go through OpenAI's Chat Completions API (raw httpx, no openai SDK):
 
-- Endpoint: `https://bedrock-runtime.us-east-1.amazonaws.com/model/${BEDROCK_MODEL_ID}/converse`
-- Model: configurable via `BEDROCK_MODEL_ID` env (defaults to `us.anthropic.claude-opus-4-6-v1`; set to `us.anthropic.claude-opus-4-7` once 4.7 returns to your account)
-- Auth: `Authorization: Bearer ${BEDROCK_API_KEY}` (Bedrock API key, not SigV4 / boto3)
+- Endpoint: `https://api.openai.com/v1/chat/completions`
+- Models: **two tiers chosen per call type** — `OPENAI_MODEL_ANALYSIS` (default `gpt-5.6-luna`) for high-context analysis/scoring/classification, and `OPENAI_MODEL_GENERATION` (default `gpt-5.6-terra`) for the generation calls (comments, rewrite strategies). Both overridable via env.
+- Auth: `Authorization: Bearer ${OPENAI_API_KEY}`
+- No output-token cap or `reasoning_effort` sent — the model uses its full default output budget; temperature left at model default
 - Concurrency cap: `Semaphore(5)` per workflow run
 
 ## API Endpoints
@@ -145,7 +147,7 @@ pm2 save
 
 - **Backend**: FastAPI, Python 3.13
 - **Frontend**: Next.js 15, React 19
-- **LLM**: Claude Opus via AWS Bedrock Converse API (model ID via `BEDROCK_MODEL_ID` env)
+- **LLM**: OpenAI Chat Completions API (two models by call type via env: `OPENAI_MODEL_ANALYSIS` / `OPENAI_MODEL_GENERATION`)
 - **Reddit API**: Apify Reddit Scraper
 - **Storage**: SQLite at `backend/data/tasks.db` with in-memory cache (7-day retention)
 

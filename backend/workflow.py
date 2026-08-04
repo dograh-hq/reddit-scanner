@@ -27,7 +27,7 @@ def load_config() -> dict:
 
 
 async def run_workflow(task_id: str, input_type: str, inputs: list[str],
-                       apify_token: str, bedrock_api_key: str,
+                       apify_token: str, openai_api_key: str,
                        kw_timeframe: str | None = None,
                        kw_sort: str | None = None,
                        kw_max_posts: int | None = None,
@@ -47,7 +47,7 @@ async def run_workflow(task_id: str, input_type: str, inputs: list[str],
         return
 
     apify = ApifyClient(apify_token)
-    llm = LLMClient(bedrock_api_key)
+    llm = LLMClient(openai_api_key)
 
     try:
         # ===== STEP 1: Parse Inputs =====
